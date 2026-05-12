@@ -21,6 +21,9 @@ version: 1.0.0+1
 environment:
   sdk: ^3.11.5
 
+# F-Droid: pin the Flutter SDK version used for reproducible builds
+# f-droid-flutter: 3.19.0
+
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
 # consider running `flutter pub upgrade --major-versions`. Alternatively,

@@ -1,0 +1,1 @@
+A minimalist, high-performance lyrics viewer for Android.

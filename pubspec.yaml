@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.1+2
 
 environment:
-  sdk: ^3.11.5
+  sdk: ^3.3.0
 
 # F-Droid: pin the Flutter SDK version used for reproducible builds
 # f-droid-flutter: 3.19.0

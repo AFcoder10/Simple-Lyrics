@@ -11,7 +11,7 @@ A minimalist and high-performance lyrics viewer for Android that integrates with
 
 ## How to Install
 - **F-Droid**: Coming soon.
-- **Direct Download**: Check the [Releases](https://github.com/AFcoder10/Simple-Lyrics/releases) page for the latest APK.
+- **Direct Download**: Check the [Releases](https://github.com/AFcoder10/Simple-Lyrics/releases) page for the latest APK , You would need to disable play protect in order to install apk.
 
 ## Development
 This app is built with Flutter.

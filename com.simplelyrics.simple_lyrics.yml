@@ -20,10 +20,10 @@ Builds:
       - flutterVersion=$(sed -n -E "s/.*f-droid-flutter:\s*(.*)/\1/p" pubspec.yaml)
       - '[[ $flutterVersion ]]'
       - git -C $$flutter$$ checkout -f $flutterVersion
-      - PLAY_CORE_PATTERN='/com\.google\.android\.play/d'
+      - PLAY_CORE_PATTERN='/com\.google\.android\.play|play[-.]core/d'
       # F-Droid: remove Play Core dependency lines from Flutter tooling scripts; format varies by version.
-      - if [ -f $$flutter$$/packages/flutter_tools/gradle/src/main/groovy/flutter.groovy ]; then sed -i -e "$PLAY_CORE_PATTERN" $$flutter$$/packages/flutter_tools/gradle/src/main/groovy/flutter.groovy; else echo "Warning: flutter.groovy not found"; fi
-      - if [ -f $$flutter$$/packages/flutter_tools/gradle/src/main/kotlin/flutter.gradle.kts ]; then sed -i -e "$PLAY_CORE_PATTERN" $$flutter$$/packages/flutter_tools/gradle/src/main/kotlin/flutter.gradle.kts; else echo "Warning: flutter.gradle.kts not found"; fi
+      - if [ -f $$flutter$$/packages/flutter_tools/gradle/src/main/groovy/flutter.groovy ]; then sed -i -E -e "$PLAY_CORE_PATTERN" $$flutter$$/packages/flutter_tools/gradle/src/main/groovy/flutter.groovy; else echo "Warning: flutter.groovy not found"; fi
+      - if [ -f $$flutter$$/packages/flutter_tools/gradle/src/main/kotlin/flutter.gradle.kts ]; then sed -i -E -e "$PLAY_CORE_PATTERN" $$flutter$$/packages/flutter_tools/gradle/src/main/kotlin/flutter.gradle.kts; else echo "Warning: flutter.gradle.kts not found"; fi
       - export PUB_CACHE=$(pwd)/.pub-cache
       - $$flutter$$/bin/flutter config --no-analytics
       - $$flutter$$/bin/flutter pub get

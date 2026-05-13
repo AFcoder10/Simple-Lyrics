@@ -39,6 +39,11 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    packaging {
+        // F-Droid: Exclude Play Core classes from the APK
+        exclude("com/google/android/play/**")
+    }
 }
 
 flutter {

@@ -10,7 +10,7 @@ RepoType: git
 Repo: https://github.com/AFcoder10/Simple-Lyrics.git
 
 Builds:
-  - versionName: 1.0.1
+  - versionName: 1.0.2
     versionCode: 3
     commit: 4c2a9cd85dc3aabbcef769be0d9b96d8ed1b02d5
     output: build/app/outputs/flutter-apk/app-release.apk
@@ -35,5 +35,5 @@ Builds:
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
 UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
-CurrentVersion: 1.0.1
+CurrentVersion: 1.0.2
 CurrentVersionCode: 3

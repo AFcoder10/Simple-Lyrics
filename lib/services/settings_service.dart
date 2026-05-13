@@ -13,6 +13,7 @@ class SettingsService {
   final ValueNotifier<double> lyricsFontSize = ValueNotifier<double>(35.0);
   final ValueNotifier<bool> hapticLyricsEnabled = ValueNotifier<bool>(false);
   final ValueNotifier<double> hapticIntensity = ValueNotifier<double>(0.5); // 0.0 to 1.0
+  final ValueNotifier<bool> wordToWordHapticsEnabled = ValueNotifier<bool>(true);
   final ValueNotifier<bool> parallaxEnabled = ValueNotifier<bool>(false);
 
   /// Initialize the service and load persisted settings.
@@ -22,6 +23,7 @@ class SettingsService {
     lyricsFontSize.value = _prefs.getDouble('lyrics_font_size') ?? 35.0;
     hapticLyricsEnabled.value = _prefs.getBool('haptic_lyrics_enabled') ?? false;
     hapticIntensity.value = _prefs.getDouble('haptic_intensity') ?? 0.5;
+    wordToWordHapticsEnabled.value = _prefs.getBool('word_to_word_haptics_enabled') ?? true;
     parallaxEnabled.value = _prefs.getBool('parallax_enabled') ?? false;
 
     // Listen for changes and persist them
@@ -36,6 +38,9 @@ class SettingsService {
     });
     hapticIntensity.addListener(() {
       _prefs.setDouble('haptic_intensity', hapticIntensity.value);
+    });
+    wordToWordHapticsEnabled.addListener(() {
+      _prefs.setBool('word_to_word_haptics_enabled', wordToWordHapticsEnabled.value);
     });
     parallaxEnabled.addListener(() {
       _prefs.setBool('parallax_enabled', parallaxEnabled.value);

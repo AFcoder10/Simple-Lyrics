@@ -289,25 +289,18 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
         if (_focusIndex >= 0 && focusChanged) {
           final settings = SettingsService();
           if (settings.hapticLyricsEnabled.value) {
-            final intensity = settings.hapticIntensity.value;
+            // Trigger a sharp, distinct "Line Start" vibration
+            // Scale intensity by the squared user setting for better low-end control
+            final curve = settings.hapticIntensity.value * settings.hapticIntensity.value;
+            final intensity = (255 * curve).toInt().clamp(0, 255);
             
-            // Try high-fidelity haptics first
-            if (intensity < 0.3) {
-              HapticFeedback.selectionClick();
-            } else if (intensity < 0.7) {
-              HapticFeedback.lightImpact();
-            } else {
-              HapticFeedback.mediumImpact();
+            // Only vibrate if intensity is above a negligible threshold
+            if (intensity > 10) {
+              Vibration.vibrate(duration: 48, amplitude: intensity);
             }
-
-            // Also trigger standard vibration for older devices (Compatibility Layer)
-            // We use shorter durations for lower intensity
-            Vibration.hasVibrator().then((hasVibrator) {
-              if (hasVibrator == true) {
-                final duration = (15 + (intensity * 45)).toInt(); // 15ms to 60ms
-                Vibration.vibrate(duration: duration);
-              }
-            });
+            
+            // Also trigger standard HapticFeedback for consistency
+            HapticFeedback.lightImpact();
           }
         }
 
@@ -606,7 +599,10 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                                         } else {
                                           return RepaintBoundary(
                                             child: line.hasWordTiming && (!romanize || line.transliteratedText == null)
-                                              ? _ActiveWordLine(line: line, smoothSeconds: _smoothSeconds)
+                                              ? _ActiveWordLine(
+                                                  line: line, 
+                                                  smoothSeconds: _smoothSeconds,
+                                                )
                                               : _StaticLine(line: line, text: effectiveText),
                                           );
                                         }
@@ -673,7 +669,7 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
   }
 }
 
-class _ActiveWordLine extends StatelessWidget {
+class _ActiveWordLine extends StatefulWidget {
   final LyricsLine line;
   final ValueNotifier<double> smoothSeconds;
 
@@ -683,25 +679,130 @@ class _ActiveWordLine extends StatelessWidget {
   });
 
   @override
+  State<_ActiveWordLine> createState() => _ActiveWordLineState();
+}
+
+class _ActiveWordLineState extends State<_ActiveWordLine> {
+  int _lastVibratedWordIndex = -1;
+  bool _isWordVibrating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.smoothSeconds.addListener(_handleSecondsChange);
+  }
+
+  @override
+  void didUpdateWidget(_ActiveWordLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.line != widget.line) {
+      _lastVibratedWordIndex = -1;
+    }
+    if (oldWidget.smoothSeconds != widget.smoothSeconds) {
+      oldWidget.smoothSeconds.removeListener(_handleSecondsChange);
+      widget.smoothSeconds.addListener(_handleSecondsChange);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.smoothSeconds.removeListener(_handleSecondsChange);
+    super.dispose();
+  }
+
+  void _handleSecondsChange() {
+    if (!mounted) return;
+    final settings = SettingsService();
+    if (!settings.hapticLyricsEnabled.value || !settings.wordToWordHapticsEnabled.value) return;
+
+    final sec = widget.smoothSeconds.value;
+    int activeIdx = -1;
+    for (int i = 0; i < widget.line.words.length; i++) {
+      if (sec >= widget.line.words[i].startTime && sec < widget.line.words[i].endTime) {
+        activeIdx = i;
+        break;
+      }
+    }
+
+    if (activeIdx != -1 && activeIdx != _lastVibratedWordIndex) {
+      _lastVibratedWordIndex = activeIdx;
+      _triggerWordHaptic(widget.line.words[activeIdx]);
+    }
+  }
+
+  Future<void> _triggerWordHaptic(LyricsWord word) async {
+    if (_isWordVibrating) {
+      Vibration.cancel();
+    }
+    _isWordVibrating = true;
+    
+    final durationMs = ((word.endTime - word.startTime) * 1000).toInt();
+    if (durationMs <= 20) {
+      _isWordVibrating = false;
+      return;
+    }
+
+    // We split the word duration into several segments of increasing intensity
+    const steps = 5;
+    final stepDur = (durationMs / steps).floor();
+    if (stepDur < 12) return; // Too short for a ramp
+
+    final settings = SettingsService();
+    final globalIntensity = settings.hapticIntensity.value;
+    
+    // If intensity is very low, skip to save battery/cycles
+    if (globalIntensity < 0.05) {
+      _isWordVibrating = false;
+      return;
+    }
+
+    // Smart Scaling: Use a power curve (1.5) so that low slider values 
+    // feel significantly weaker, while high values stay powerful.
+    final curvedIntensity = globalIntensity * globalIntensity; // squared for better low-end control
+
+    for (int i = 1; i <= steps; i++) {
+      // Re-read intensity in case it changed mid-word
+      final currentGlobal = settings.hapticIntensity.value;
+      final currentCurve = currentGlobal * currentGlobal;
+      
+      // Smart Ramp: Scale both the starting point and the peak.
+      // At low slider values, the 'start' becomes very faint (near 0).
+      final startFloor = 20 * currentCurve; 
+      final peakCeiling = 255 * currentCurve;
+      
+      final baseIntensity = startFloor + (peakCeiling - startFloor) * (i / steps);
+      final intensity = baseIntensity.toInt().clamp(0, 255);
+      
+      // If the hardware doesn't support amplitude, we can't do much, 
+      // but individual calls with amplitude are the most compatible way.
+      Vibration.vibrate(duration: stepDur, amplitude: intensity);
+      
+      await Future.delayed(Duration(milliseconds: stepDur));
+    }
+    
+    _isWordVibrating = false;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final settings = SettingsService();
-    final alignment = line.alignment == LyricsLineAlignment.right
+    final alignment = widget.line.alignment == LyricsLineAlignment.right
         ? Alignment.centerRight
         : Alignment.centerLeft;
 
     return ValueListenableBuilder<double>(
       valueListenable: settings.lyricsFontSize,
       builder: (context, fontSize, _) {
-        final effectiveFontSize = line.isBackground ? fontSize * 0.8 : fontSize;
+        final effectiveFontSize = widget.line.isBackground ? fontSize * 0.8 : fontSize;
 
         Widget buildWrap(double lineSeconds) {
           return Wrap(
-            alignment: line.alignment == LyricsLineAlignment.right
+            alignment: widget.line.alignment == LyricsLineAlignment.right
                 ? WrapAlignment.end
                 : WrapAlignment.start,
             spacing: 0,
             runSpacing: 4,
-            children: line.words.map((word) {
+            children: widget.line.words.map((word) {
               final dur = word.endTime - word.startTime;
               double progress;
               
@@ -743,13 +844,13 @@ class _ActiveWordLine extends StatelessWidget {
 
         return Padding(
           padding: EdgeInsets.only(
-            top: line.isBackground ? 0 : 16,
-            bottom: line.isBackground ? 4 : 16,
+            top: widget.line.isBackground ? 0 : 16,
+            bottom: widget.line.isBackground ? 4 : 16,
           ),
           child: Align(
             alignment: alignment,
             child: ValueListenableBuilder<double>(
-              valueListenable: smoothSeconds,
+              valueListenable: widget.smoothSeconds,
               builder: (context, lineSeconds, _) => buildWrap(lineSeconds),
             ),
           ),

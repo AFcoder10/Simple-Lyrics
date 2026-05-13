@@ -41,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen>
   // Lyrics state
   final LyricsService _lyricsService = LyricsService();
   final ArtworkService _artworkService = ArtworkService();
+  
   LyricsData? _lyricsData;
   bool _lyricsLoading = false;
   String? _lyricsError;

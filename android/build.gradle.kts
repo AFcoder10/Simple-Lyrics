@@ -15,9 +15,18 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
     
-    // F-Droid: Globally exclude non-free Google Play Core modules from all subprojects (plugins)
+    // F-Droid: Forcefully substitute non-free Google Play Core modules with a harmless free library
     configurations.all {
         exclude(group = "com.google.android.play")
+        resolutionStrategy.dependencySubstitution {
+            substitute(module("com.google.android.play:core")).using(module("androidx.annotation:annotation:1.5.0"))
+            substitute(module("com.google.android.play:core-common")).using(module("androidx.annotation:annotation:1.5.0"))
+            substitute(module("com.google.android.play:review")).using(module("androidx.annotation:annotation:1.5.0"))
+            substitute(module("com.google.android.play:app-update")).using(module("androidx.annotation:annotation:1.5.0"))
+            substitute(module("com.google.android.play:feature-delivery")).using(module("androidx.annotation:annotation:1.5.0"))
+            substitute(module("com.google.android.play:integrity")).using(module("androidx.annotation:annotation:1.5.0"))
+            substitute(module("com.google.android.play:tasks")).using(module("androidx.annotation:annotation:1.5.0"))
+        }
     }
 }
 subprojects {

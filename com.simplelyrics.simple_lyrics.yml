@@ -17,9 +17,7 @@ Builds:
     srclibs:
       - flutter@stable
     prebuild:
-      - flutterVersion=$(grep "f-droid-flutter:" pubspec.yaml | cut -d ":" -f 2 | tr -d " ")
-      - '[[ $flutterVersion ]]'
-      - git -C $$flutter$$ checkout -f $flutterVersion
+      - git -C $$flutter$$ checkout -f 3.41.9
 
       - export PUB_CACHE=$(pwd)/.pub-cache
       - $$flutter$$/bin/flutter config --no-analytics

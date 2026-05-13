@@ -20,7 +20,7 @@ Builds:
       - flutterVersion=$(sed -n -E "s/.*f-droid-flutter:\s*(.*)/\1/p" pubspec.yaml)
       - '[[ $flutterVersion ]]'
       - git -C $$flutter$$ checkout -f $flutterVersion
-      - PLAY_CORE_PATTERN='/com\.google\.android\.play|play-core/d'
+      - PLAY_CORE_PATTERN="/com\\.google\\.android\\.play|play-core/d"
       # F-Droid: remove Play Core dependency lines from Flutter tooling scripts; format varies by version.
       - |
         for file in \
@@ -29,7 +29,7 @@ Builds:
           if [ -f "$file" ]; then
             sed -i -E -e "$PLAY_CORE_PATTERN" "$file"
           else
-            echo "Warning: $file not found"
+            echo "Warning: $file not found (may be expected for this Flutter version)"
           fi
         done
       - export PUB_CACHE=$(pwd)/.pub-cache

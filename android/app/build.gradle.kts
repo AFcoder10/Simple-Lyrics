@@ -59,4 +59,3 @@ val createReleaseDesugarDexDir by tasks.registering {
 tasks.matching { it.name == "mergeExtDexRelease" }.configureEach {
     dependsOn(createReleaseDesugarDexDir)
 }
-

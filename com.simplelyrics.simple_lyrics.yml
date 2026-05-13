@@ -17,8 +17,20 @@ Builds:
     srclibs:
       - flutter@stable
     prebuild:
-      - git -C $$flutter$$ checkout -f 3.41.9
-
+      - flutterVersion=$(sed -n -E "s/.*f-droid-flutter:\s*(.*)/\1/p" pubspec.yaml)
+      - '[[ $flutterVersion ]]'
+      - git -C $$flutter$$ checkout -f $flutterVersion
+      # F-Droid: remove Play Core dependency lines from Flutter tooling scripts; format varies by version.
+      - |
+        for file in \
+          "$$flutter$$/packages/flutter_tools/gradle/src/main/groovy/flutter.groovy" \
+          "$$flutter$$/packages/flutter_tools/gradle/src/main/kotlin/flutter.gradle.kts"; do
+          if [ -f "$file" ]; then
+            sed -i -E -e '/(com\.google\.android\.play|play-core)/d' "$file"
+          else
+            echo "Skipping $file (not present in this Flutter version)"
+          fi
+        done
       - export PUB_CACHE=$(pwd)/.pub-cache
       - $$flutter$$/bin/flutter config --no-analytics
       - $$flutter$$/bin/flutter pub get

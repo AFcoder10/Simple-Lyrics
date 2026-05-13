@@ -20,9 +20,8 @@ Builds:
       - flutterVersion=$(sed -n -E "s/.*f-droid-flutter:\s*(.*)/\1/p" pubspec.yaml)
       - '[[ $flutterVersion ]]'
       - git -C $$flutter$$ checkout -f $flutterVersion
-      - sed -i -e '/com\\.google\\.android\\.play/d' $$flutter$$/packages/flutter_tools/gradle/src/main/groovy/flutter.groovy
-        || sed -i -e '/com\\.google\\.android\\.play/d' $$flutter$$/packages/flutter_tools/gradle/src/main/kotlin/flutter.gradle.kts
-        || true
+      - sed -i -e '/com\\.google\\.android\\.play/d' $$flutter$$/packages/flutter_tools/gradle/src/main/groovy/flutter.groovy || true
+      - sed -i -e '/com\\.google\\.android\\.play/d' $$flutter$$/packages/flutter_tools/gradle/src/main/kotlin/flutter.gradle.kts || true
       - export PUB_CACHE=$(pwd)/.pub-cache
       - $$flutter$$/bin/flutter config --no-analytics
       - $$flutter$$/bin/flutter pub get

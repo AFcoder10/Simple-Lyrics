@@ -61,6 +61,7 @@ tasks.matching { it.name == "mergeExtDexRelease" }.configureEach {
 }
 
 configurations.all {
+    exclude(group = "com.google.android.play")
     exclude(group = "com.google.android.play", module = "core")
     exclude(group = "com.google.android.play", module = "core-common")
     exclude(group = "com.google.android.play", module = "review")

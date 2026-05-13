@@ -12,7 +12,7 @@ Repo: https://github.com/AFcoder10/Simple-Lyrics.git
 Builds:
   - versionName: 1.0.3
     versionCode: 4
-    commit: v1.0.3
+    commit: 514adb0e7c43692228a854f1385e3a599cb46c40
     output: build/app/outputs/flutter-apk/app-release.apk
     srclibs:
       - flutter@stable

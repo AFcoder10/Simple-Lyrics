@@ -18,13 +18,6 @@ subprojects {
     // F-Droid: Globally exclude non-free Google Play Core modules from all subprojects (plugins)
     configurations.all {
         exclude(group = "com.google.android.play")
-        exclude(group = "com.google.android.play", module = "core")
-        exclude(group = "com.google.android.play", module = "core-common")
-        exclude(group = "com.google.android.play", module = "review")
-        exclude(group = "com.google.android.play", module = "app-update")
-        exclude(group = "com.google.android.play", module = "feature-delivery")
-        exclude(group = "com.google.android.play", module = "integrity")
-        exclude(group = "com.google.android.play", module = "tasks")
     }
 }
 subprojects {

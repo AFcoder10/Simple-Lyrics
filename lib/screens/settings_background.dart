@@ -81,7 +81,76 @@ class BackgroundSettingsScreen extends StatelessWidget {
               },
             ),
           ),
-          const SizedBox(height: 20),
+          ValueListenableBuilder<BackgroundStyle>(
+            valueListenable: settings.backgroundStyle,
+            builder: (context, currentStyle, _) {
+              if (currentStyle != BackgroundStyle.acrylic) {
+                return const SizedBox(height: 20);
+              }
+              return Column(
+                children: [
+                  const SizedBox(height: 20),
+                  _buildSettingSection(
+                    title: 'Acrylic Texture',
+                    child: ValueListenableBuilder<AcrylicTexture>(
+                      valueListenable: settings.acrylicTexture,
+                      builder: (context, currentTexture, _) {
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                          ),
+                          child: Theme(
+                            data: Theme.of(context).copyWith(
+                              canvasColor: const Color(0xFF161616),
+                              splashColor: Colors.transparent,
+                            ),
+                            child: DropdownButtonFormField<AcrylicTexture>(
+                              value: currentTexture,
+                              decoration: const InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                border: InputBorder.none,
+                              ),
+                              icon: const Icon(Icons.expand_more_rounded, color: Colors.white38),
+                              dropdownColor: const Color(0xFF161616),
+                              borderRadius: BorderRadius.circular(20),
+                              items: AcrylicTexture.values.map((texture) {
+                                return DropdownMenuItem<AcrylicTexture>(
+                                  value: texture,
+                                  child: Row(
+                                    children: [
+                                      Icon(_getIconForTexture(texture), color: Colors.white70, size: 20),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        _getTextureName(texture),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w500,
+                                          fontFamily: 'Display',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (AcrylicTexture? newTexture) {
+                                if (newTexture != null) {
+                                  settings.acrylicTexture.value = newTexture;
+                                }
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              );
+            },
+          ),
           _buildInfoTile(
             'Each style is optimized for performance and ensures lyric legibility by automatically adjusting brightness based on the current artwork.',
           ),
@@ -150,6 +219,24 @@ class BackgroundSettingsScreen extends StatelessWidget {
       case BackgroundStyle.spinningBlur: return Icons.auto_awesome_rounded;
       case BackgroundStyle.acrylic: return Icons.blur_on_rounded;
       case BackgroundStyle.staticColor: return Icons.palette_rounded;
+    }
+  }
+
+  String _getTextureName(AcrylicTexture texture) {
+    switch (texture) {
+      case AcrylicTexture.fineGrain: return 'Fine Grain';
+      case AcrylicTexture.frosted: return 'Frosted';
+      case AcrylicTexture.ripple: return 'Ripple / Water';
+      case AcrylicTexture.crystalline: return 'Crystalline';
+    }
+  }
+
+  IconData _getIconForTexture(AcrylicTexture texture) {
+    switch (texture) {
+      case AcrylicTexture.fineGrain: return Icons.grain_rounded;
+      case AcrylicTexture.frosted: return Icons.cloud_rounded;
+      case AcrylicTexture.ripple: return Icons.water_drop_rounded;
+      case AcrylicTexture.crystalline: return Icons.diamond_rounded;
     }
   }
 }

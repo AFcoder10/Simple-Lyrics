@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
+import 'settings_background.dart';
 
 class AppearanceSettingsScreen extends StatelessWidget {
   const AppearanceSettingsScreen({super.key});
@@ -78,6 +79,24 @@ class AppearanceSettingsScreen extends StatelessWidget {
               },
             ),
           ),
+          _buildSettingTile(
+            title: 'Background Style',
+            subtitle: 'Customize the lyrics background atmosphere',
+            icon: Icons.wallpaper_rounded,
+            trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white24, size: 16),
+            onTap: () {
+              Navigator.of(context).push(
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) => const BackgroundSettingsScreen(),
+                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+                  transitionDuration: const Duration(milliseconds: 350),
+                  reverseTransitionDuration: const Duration(milliseconds: 350),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -110,6 +129,7 @@ class AppearanceSettingsScreen extends StatelessWidget {
     required String subtitle,
     required IconData icon,
     required Widget trailing,
+    VoidCallback? onTap,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -119,6 +139,7 @@ class AppearanceSettingsScreen extends StatelessWidget {
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: ListTile(
+        onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         leading: Container(
           padding: const EdgeInsets.all(10),

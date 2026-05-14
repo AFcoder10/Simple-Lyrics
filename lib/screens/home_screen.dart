@@ -11,7 +11,8 @@ import '../services/cache_service.dart';
 import '../widgets/now_playing_header.dart';
 import '../widgets/lyrics_view.dart';
 import '../widgets/playback_controls.dart';
-import '../widgets/spinning_blur_background.dart';
+import '../widgets/playback_controls.dart';
+import '../widgets/backgrounds/background_controller.dart';
 
 /// Main screen that composes all UI widgets.
 class HomeScreen extends StatefulWidget {
@@ -312,7 +313,7 @@ class _HomeScreenState extends State<HomeScreen>
           child: Stack(
             children: [
               Positioned.fill(
-                child: SpinningBlurBackground(
+                child: BackgroundController(
                   albumArtBytes: _mediaState.albumArtBytes,
                 ),
               ),

@@ -12,7 +12,10 @@ import 'package:flutter/material.dart';
 class SpinningBlurBackground extends StatefulWidget {
   final Uint8List? albumArtBytes;
 
-  const SpinningBlurBackground({super.key, required this.albumArtBytes});
+  const SpinningBlurBackground({
+    super.key,
+    required this.albumArtBytes,
+  });
 
   @override
   State<SpinningBlurBackground> createState() => _SpinningBlurBackgroundState();

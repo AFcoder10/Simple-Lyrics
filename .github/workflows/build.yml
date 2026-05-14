@@ -1,0 +1,99 @@
+name: Build & Release APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.parse.outputs.should_release }}
+      version: ${{ steps.parse.outputs.version }}
+      notes: ${{ steps.parse.outputs.notes }}
+    steps:
+      - id: parse
+        run: |
+          MSG="${{ github.event.head_commit.message }}"
+          # Regex to find version like v1.0.2
+          if [[ $MSG =~ (v[0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            
+            # Extract notes after -r
+            if [[ $MSG =~ -r\ (.*) ]]; then
+              NOTES="${BASH_REMATCH[1]}"
+              echo "notes=$NOTES" >> $GITHUB_OUTPUT
+            else
+              echo "notes=Regular build for $VERSION" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed for changelog
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: 'stable'
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release --no-deferred-components
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log $PREV_TAG..HEAD --oneline --pretty=format:"* %s")
+          else
+            CHANGES=$(git log --oneline --pretty=format:"* %s")
+          fi
+          echo "changes<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.check-version.outputs.version }}
+          name: Simple Lyrics ${{ needs.check-version.outputs.version }}
+          body: |
+            ## Release Notes
+            ${{ needs.check-version.outputs.notes }}
+            
+            ## Changelog
+            ${{ steps.changelog.outputs.changes }}
+          files: |
+            build/app/outputs/flutter-apk/app-release.apk
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rename & Upload Artifact
+        run: mv build/app/outputs/flutter-apk/app-release.apk Simple-Lyrics.apk
+
+      - name: Upload Simple-Lyrics.apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: Simple-Lyrics
+          path: Simple-Lyrics.apk

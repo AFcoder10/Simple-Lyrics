@@ -59,7 +59,7 @@ jobs:
         run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --release --no-deferred-components
+        run: flutter build apk --release 
 
       - name: Generate Changelog
         id: changelog

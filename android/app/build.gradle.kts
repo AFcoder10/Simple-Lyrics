@@ -38,7 +38,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            isShrinkResources = true
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // F-Droid: The build server will handle signing
             signingConfig = signingConfigs.getByName("debug")

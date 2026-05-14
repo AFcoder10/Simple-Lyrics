@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../services/settings_service.dart';
 
 /// Full-screen animated blob background.
 ///
@@ -34,7 +35,7 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
     super.initState();
     _spinController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 26),
+      duration: _calculateDuration(),
     )..repeat();
 
     _fadeController = AnimationController(
@@ -43,7 +44,36 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
       value: 1.0,
     );
 
+    SettingsService().blurIntensity.addListener(_onSettingsChanged);
+    SettingsService().blurAnimationSpeed.addListener(_onSettingsChanged);
+
     _updateArtworkImage();
+  }
+
+  @override
+  void dispose() {
+    SettingsService().blurIntensity.removeListener(_onSettingsChanged);
+    SettingsService().blurAnimationSpeed.removeListener(_onSettingsChanged);
+    _spinController.dispose();
+    _fadeController.dispose();
+    _currentImage?.dispose();
+    _previousImage?.dispose();
+    super.dispose();
+  }
+
+  void _onSettingsChanged() {
+    _spinController.duration = _calculateDuration();
+    if (_spinController.isAnimating) {
+      _spinController.repeat(); // Restart with new duration
+    }
+    _updateArtworkImage(); // Re-blur with new intensity
+  }
+
+  Duration _calculateDuration() {
+    // defaults to 26s when speed is 1.0. 
+    // Higher speed means shorter duration
+    final speed = SettingsService().blurAnimationSpeed.value.clamp(0.1, 10.0);
+    return Duration(milliseconds: (26000 ~/ speed));
   }
 
   @override
@@ -63,6 +93,7 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
     final rect = Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble());
 
     final vibrant = await _createVibrantHighlightSafeImage(source);
+    final double sigma = SettingsService().blurIntensity.value;
 
     // --- Pass 1: heavy blur ---
     final r1 = ui.PictureRecorder();
@@ -72,8 +103,8 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
       Offset.zero,
       Paint()
         ..imageFilter = ui.ImageFilter.blur(
-          sigmaX: 40,
-          sigmaY: 40,
+          sigmaX: sigma,
+          sigmaY: sigma,
           tileMode: TileMode.clamp,
         ),
     );
@@ -90,8 +121,8 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
       Offset.zero,
       Paint()
         ..imageFilter = ui.ImageFilter.blur(
-          sigmaX: 40,
-          sigmaY: 40,
+          sigmaX: sigma,
+          sigmaY: sigma,
           tileMode: TileMode.clamp,
         ),
     );
@@ -238,15 +269,6 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
     } catch (e) {
       // Keep the last good image to avoid random interim colors.
     }
-  }
-
-  @override
-  void dispose() {
-    _spinController.dispose();
-    _fadeController.dispose();
-    _currentImage?.dispose();
-    _previousImage?.dispose();
-    super.dispose();
   }
 
   @override

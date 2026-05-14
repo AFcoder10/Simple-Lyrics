@@ -52,7 +52,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
+          flutter-version: '3.41.9'
           channel: 'stable'
 
       - name: Install Dependencies
@@ -78,7 +78,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.check-version.outputs.version }}
-          name: Simple Lyrics ${{ needs.check-version.outputs.version }}
+          name: ${{ needs.check-version.outputs.version }}
           body: |
             ## Release Notes
             ${{ needs.check-version.outputs.notes }}

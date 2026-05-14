@@ -84,73 +84,193 @@ class BackgroundSettingsScreen extends StatelessWidget {
           ValueListenableBuilder<BackgroundStyle>(
             valueListenable: settings.backgroundStyle,
             builder: (context, currentStyle, _) {
-              if (currentStyle != BackgroundStyle.acrylic) {
-                return const SizedBox(height: 20);
-              }
-              return Column(
-                children: [
-                  const SizedBox(height: 20),
-                  _buildSettingSection(
-                    title: 'Acrylic Texture',
-                    child: ValueListenableBuilder<AcrylicTexture>(
-                      valueListenable: settings.acrylicTexture,
-                      builder: (context, currentTexture, _) {
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                          ),
-                          child: Theme(
-                            data: Theme.of(context).copyWith(
-                              canvasColor: const Color(0xFF161616),
-                              splashColor: Colors.transparent,
-                            ),
-                            child: DropdownButtonFormField<AcrylicTexture>(
-                              value: currentTexture,
-                              decoration: const InputDecoration(
-                                contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                border: InputBorder.none,
-                              ),
-                              icon: const Icon(Icons.expand_more_rounded, color: Colors.white38),
-                              dropdownColor: const Color(0xFF161616),
+              return AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: currentStyle == BackgroundStyle.spinningBlur 
+                  ? Column(
+                      children: [
+                        const SizedBox(height: 20),
+                        _buildSettingSection(
+                          title: 'Dynamic Blur Settings',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(20),
-                              items: AcrylicTexture.values.map((texture) {
-                                return DropdownMenuItem<AcrylicTexture>(
-                                  value: texture,
-                                  child: Row(
-                                    children: [
-                                      Icon(_getIconForTexture(texture), color: Colors.white70, size: 20),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        _getTextureName(texture),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w500,
-                                          fontFamily: 'Display',
-                                        ),
-                                      ),
-                                    ],
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildSliderRow(
+                                  label: 'Blur Intensity',
+                                  icon: Icons.blur_linear_rounded,
+                                  valueListenable: settings.blurIntensity,
+                                  min: 10.0,
+                                  max: 80.0,
+                                ),
+                                const Divider(color: Colors.white10, height: 1),
+                                _buildSliderRow(
+                                  label: 'Animation Speed',
+                                  icon: Icons.speed_rounded,
+                                  valueListenable: settings.blurAnimationSpeed,
+                                  min: 0.2, // Very slow
+                                  max: 3.0, // Very fast
+                                ),
+                                const Divider(color: Colors.white10, height: 1),
+                                TextButton.icon(
+                                  onPressed: () {
+                                    settings.blurIntensity.value = 40.0;
+                                    settings.blurAnimationSpeed.value = 1.0;
+                                  },
+                                  icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white70),
+                                  label: const Text(
+                                    'Reset Defaults',
+                                    style: TextStyle(color: Colors.white70, fontFamily: 'Display'),
                                   ),
-                                );
-                              }).toList(),
-                              onChanged: (AcrylicTexture? newTexture) {
-                                if (newTexture != null) {
-                                  settings.acrylicTexture.value = newTexture;
-                                }
-                              },
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    minimumSize: const Size(double.infinity, 0),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
               );
             },
           ),
+          ValueListenableBuilder<BackgroundStyle>(
+            valueListenable: settings.backgroundStyle,
+            builder: (context, currentStyle, _) {
+              return AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: currentStyle == BackgroundStyle.acrylic 
+                  ? Column(
+                      children: [
+                        const SizedBox(height: 20),
+                        _buildSettingSection(
+                          title: 'Acrylic Texture Settings',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildSliderRow(
+                                  label: 'Grain Intensity',
+                                  icon: Icons.grain_rounded,
+                                  valueListenable: settings.grainIntensity,
+                                  min: 0.0,
+                                  max: 0.15,
+                                ),
+                                const Divider(color: Colors.white10, height: 1),
+                                TextButton.icon(
+                                  onPressed: () {
+                                    settings.grainIntensity.value = 0.04;
+                                  },
+                                  icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white70),
+                                  label: const Text(
+                                    'Reset Defaults',
+                                    style: TextStyle(color: Colors.white70, fontFamily: 'Display'),
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    minimumSize: const Size(double.infinity, 0),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+              );
+            },
+          ),
+          ValueListenableBuilder<BackgroundStyle>(
+            valueListenable: settings.backgroundStyle,
+            builder: (context, currentStyle, _) {
+              return AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: currentStyle == BackgroundStyle.staticColor 
+                  ? Column(
+                      children: [
+                        const SizedBox(height: 20),
+                        _buildSettingSection(
+                          title: 'Static Color Settings',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildSliderRow(
+                                  label: 'Vibrancy',
+                                  icon: Icons.contrast_rounded,
+                                  valueListenable: settings.staticVibrancy,
+                                  min: 0.0,
+                                  max: 3.0,
+                                ),
+                                const Divider(color: Colors.white10, height: 1),
+                                _buildSliderRow(
+                                  label: 'Contrast',
+                                  icon: Icons.brightness_medium_rounded,
+                                  valueListenable: settings.staticContrast,
+                                  min: 0.2, // low contrast
+                                  max: 2.5, // high contrast
+                                ),
+                                const Divider(color: Colors.white10, height: 1),
+                                TextButton.icon(
+                                  onPressed: () {
+                                    settings.staticVibrancy.value = 1.8;
+                                    settings.staticContrast.value = 1.0;
+                                  },
+                                  icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white70),
+                                  label: const Text(
+                                    'Reset Defaults',
+                                    style: TextStyle(color: Colors.white70, fontFamily: 'Display'),
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    minimumSize: const Size(double.infinity, 0),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+              );
+            },
+          ),
+          const SizedBox(height: 20),
           _buildInfoTile(
             'Each style is optimized for performance and ensures lyric legibility by automatically adjusting brightness based on the current artwork.',
           ),
@@ -206,6 +326,60 @@ class BackgroundSettingsScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildSliderRow({
+    required String label,
+    required IconData icon,
+    required ValueNotifier<double> valueListenable,
+    required double min,
+    required double max,
+  }) {
+    return ValueListenableBuilder<double>(
+      valueListenable: valueListenable,
+      builder: (context, val, _) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: Colors.white70, size: 18),
+                  const SizedBox(width: 12),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: 'Display',
+                    ),
+                  ),
+                ],
+              ),
+              SliderTheme(
+                data: SliderThemeData(
+                  activeTrackColor: Colors.white,
+                  inactiveTrackColor: Colors.white24,
+                  thumbColor: Colors.white,
+                  overlayColor: Colors.white.withValues(alpha: 0.1),
+                  trackHeight: 3,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                ),
+                child: Slider(
+                  value: val,
+                  min: min,
+                  max: max,
+                  onChanged: (newVal) => valueListenable.value = newVal,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   String _getStyleName(BackgroundStyle style) {
     switch (style) {
       case BackgroundStyle.spinningBlur: return 'Dynamic Blur';
@@ -219,24 +393,6 @@ class BackgroundSettingsScreen extends StatelessWidget {
       case BackgroundStyle.spinningBlur: return Icons.auto_awesome_rounded;
       case BackgroundStyle.acrylic: return Icons.blur_on_rounded;
       case BackgroundStyle.staticColor: return Icons.palette_rounded;
-    }
-  }
-
-  String _getTextureName(AcrylicTexture texture) {
-    switch (texture) {
-      case AcrylicTexture.fineGrain: return 'Fine Grain';
-      case AcrylicTexture.frosted: return 'Frosted';
-      case AcrylicTexture.ripple: return 'Ripple / Water';
-      case AcrylicTexture.crystalline: return 'Crystalline';
-    }
-  }
-
-  IconData _getIconForTexture(AcrylicTexture texture) {
-    switch (texture) {
-      case AcrylicTexture.fineGrain: return Icons.grain_rounded;
-      case AcrylicTexture.frosted: return Icons.cloud_rounded;
-      case AcrylicTexture.ripple: return Icons.water_drop_rounded;
-      case AcrylicTexture.crystalline: return Icons.diamond_rounded;
     }
   }
 }

@@ -24,14 +24,6 @@ jobs:
             VERSION="${BASH_REMATCH[1]}"
             echo "should_release=true" >> $GITHUB_OUTPUT
             echo "version=$VERSION" >> $GITHUB_OUTPUT
-            
-            # Extract notes after -r
-            if [[ $MSG =~ -r\ (.*) ]]; then
-              NOTES="${BASH_REMATCH[1]}"
-              echo "notes=$NOTES" >> $GITHUB_OUTPUT
-            else
-              echo "notes=Regular build for $VERSION" >> $GITHUB_OUTPUT
-            fi
           else
             echo "should_release=false" >> $GITHUB_OUTPUT
           fi
@@ -64,36 +56,18 @@ jobs:
       - name: Build APK
         run: flutter build apk --release 
 
-      - name: Generate Changelog
-        id: changelog
-        run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$PREV_TAG" ]; then
-            CHANGES=$(git log $PREV_TAG..HEAD --oneline --pretty=format:"* %s")
-          else
-            CHANGES=$(git log --oneline --pretty=format:"* %s")
-          fi
-          echo "changes<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Rename APK
+        run: mv build/app/outputs/flutter-apk/app-release.apk Simple-Lyrics.apk
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.check-version.outputs.version }}
           name: ${{ needs.check-version.outputs.version }}
-          body: |
-            ## Release Notes
-            ${{ needs.check-version.outputs.notes }}
-            
-            ## Changelog
-            ${{ steps.changelog.outputs.changes }}
+          body_path: release_notes.md
           files: |
-            build/app/outputs/flutter-apk/app-release.apk
+            Simple-Lyrics.apk
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Rename & Upload Artifact
-        run: mv build/app/outputs/flutter-apk/app-release.apk Simple-Lyrics.apk
 
       - name: Upload Simple-Lyrics.apk
         uses: actions/upload-artifact@v4

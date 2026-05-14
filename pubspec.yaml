@@ -43,6 +43,10 @@ dependencies:
   wakelock_plus: ^1.6.0
   sensors_plus: ^7.0.0
   vibration: ^3.1.8
+  dio: ^5.9.2
+  package_info_plus: ^10.1.0
+  flutter_markdown: ^0.7.7+1
+  open_filex: ^4.7.0
 
 dev_dependencies:
   flutter_test:

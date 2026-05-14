@@ -13,6 +13,8 @@ import '../widgets/lyrics_view.dart';
 import '../widgets/playback_controls.dart';
 import '../widgets/playback_controls.dart';
 import '../widgets/backgrounds/background_controller.dart';
+import '../services/update_service.dart';
+import '../widgets/update_dialog.dart';
 
 /// Main screen that composes all UI widgets.
 class HomeScreen extends StatefulWidget {
@@ -57,6 +59,24 @@ class _HomeScreenState extends State<HomeScreen>
     widget.service.init();
     _subscription = widget.service.mediaStateStream.listen(_onMediaStateUpdate);
     _startHideTimer();
+
+    // Check for app updates
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkForUpdates();
+    });
+  }
+
+  Future<void> _checkForUpdates() async {
+    final updateService = UpdateService();
+    final updateInfo = await updateService.checkForUpdate();
+    
+    if (updateInfo != null && mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false, // Force the user to interact with the popup
+        builder: (context) => UpdateDialog(updateInfo: updateInfo),
+      );
+    }
   }
 
   void _tickVisualPosition() {

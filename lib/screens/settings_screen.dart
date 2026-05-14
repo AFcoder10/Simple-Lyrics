@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../services/media_session_service.dart';
 import 'settings_appearance.dart';
 import 'settings_immersive.dart';
@@ -72,12 +73,18 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 40),
                 Center(
-                  child: Text(
-                    'Simple Lyrics v1.0.1',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      fontSize: 12,
-                    ),
+                  child: FutureBuilder<PackageInfo>(
+                    future: PackageInfo.fromPlatform(),
+                    builder: (context, snapshot) {
+                      final version = snapshot.hasData ? snapshot.data!.version : '...';
+                      return Text(
+                        'Simple Lyrics v$version',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          fontSize: 12,
+                        ),
+                      );
+                    },
                   ),
                 ),
               ]),

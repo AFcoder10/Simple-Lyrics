@@ -1,0 +1,1 @@
+A minimalist and high-performance lyrics viewer for Android that integrates with your media playback.

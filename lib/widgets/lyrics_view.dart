@@ -57,6 +57,12 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
   bool _userIsTouching = false;
   bool _waitingForNewTrackLyrics = false;
   int _searchAttempts = 0; // NEW: Track search jumps
+  
+  // Seek indicator state
+  bool _showSeekIndicator = false;
+  int _seekDelta = 0;
+  Timer? _seekIndicatorTimer;
+  double? _dragStartX;
 
   List<int> _displayItems = [];
   List<double> _interludeStarts = []; 
@@ -381,7 +387,29 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
     }
   }
 
+  void _triggerSeek(int seconds) {
+    if (widget.lyricsData == null) return;
+    
+    widget.onLyricsInteraction();
+    final currentPos = widget.position;
+    final newPos = Duration(seconds: (currentPos.inSeconds + seconds).clamp(0, widget.duration.inSeconds));
+    
+    widget.service.seekTo(newPos);
+    HapticFeedback.mediumImpact();
+    
+    setState(() {
+      _showSeekIndicator = true;
+      _seekDelta = seconds;
+    });
+    
+    _seekIndicatorTimer?.cancel();
+    _seekIndicatorTimer = Timer(const Duration(milliseconds: 600), () {
+      if (mounted) setState(() => _showSeekIndicator = false);
+    });
+  }
+
   void _scrollToFocusLine() {
+    if (widget.lyricsData?.timingType == LyricsTimingType.none) return;
     if (!_isAutoLocked || !_scrollController.hasClients || _pendingScrollToTop) return;
     if (_focusDisplayIndex < 0 || _focusDisplayIndex >= _lineKeys.length) return;
 
@@ -501,7 +529,30 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
           }
           return false;
         },
-        child: RepaintBoundary(
+        child: GestureDetector(
+          onHorizontalDragStart: (details) {
+            _dragStartX = details.globalPosition.dx;
+          },
+          onHorizontalDragEnd: (details) {
+            if (_dragStartX == null) return;
+            
+            final screenWidth = MediaQuery.of(context).size.width;
+            const deadZone = 45.0; // Avoid triggering system back gestures
+            
+            if (_dragStartX! < deadZone || _dragStartX! > screenWidth - deadZone) {
+              return;
+            }
+
+            final velocity = details.primaryVelocity ?? 0;
+            if (velocity < -300) {
+              _triggerSeek(-10); // Swipe Left -> Backward
+            } else if (velocity > 300) {
+              _triggerSeek(10); // Swipe Right -> Forward
+            }
+          },
+          child: Stack(
+            children: [
+              RepaintBoundary(
           child: ValueListenableBuilder<Matrix4>(
             valueListenable: _parallaxTransform,
             builder: (context, transform, child) {
@@ -515,8 +566,28 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
               controller: _scrollController,
               physics: const BouncingScrollPhysics(),
               slivers: [
+                if (data.timingType == LyricsTimingType.none && data.songwriters.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 28.0, right: 28.0, top: 140.0, bottom: 20.0),
+                      child: material.Text(
+                        'Written by: ${data.songwriters.join(', ')}',
+                        style: TextStyle(
+                          fontFamily: 'Display',
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.1,
+                        ),
+                        textAlign: TextAlign.left,
+                      ),
+                    ),
+                  ),
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 140),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 28, 
+                    vertical: data.timingType == LyricsTimingType.none ? 0 : 140,
+                  ),
                   sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, displayIndex) {
@@ -544,7 +615,7 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                       final isFocused = lineIndex == _focusIndex;
                       final distance = _focusDisplayIndex >= 0 ? (displayIndex - _focusDisplayIndex).abs() : 0;
                       
-                        final blurSigma = (_isAutoLocked && !_startupSettling && !_firstScroll && distance > 1) 
+                      final blurSigma = (data.timingType != LyricsTimingType.none && _isAutoLocked && !_startupSettling && !_firstScroll && distance > 1) 
                           ? (distance - 1).toDouble() * 2.5 
                           : 0.0;
                       final clampedBlur = blurSigma.clamp(0.0, 8.0);
@@ -557,6 +628,8 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                           key: _lineKeys[displayIndex],
                           child: GestureDetector(
                             onTap: () {
+                              if (data.timingType == LyricsTimingType.none) return;
+                              
                               HapticFeedback.selectionClick();
                               widget.onLyricsInteraction();
                               widget.service.notifyUserInteraction();
@@ -577,10 +650,10 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                                 duration: const Duration(milliseconds: 520),
                                 curve: Curves.easeOutCubic,
                                 child: Padding(
-                                  padding: EdgeInsets.only(
-                                    top: isFocused && !line.isBackground ? 2.0 : 0.0,
-                                    bottom: isFocused && !line.isBackground ? 8.0 : 2.0,
-                                  ),
+                                    padding: EdgeInsets.only(
+                                      top: isFocused && !line.isBackground ? 2.0 : (data.timingType == LyricsTimingType.none ? 8.0 : 0.0),
+                                      bottom: isFocused && !line.isBackground ? 8.0 : (data.timingType == LyricsTimingType.none ? 8.0 : 2.0),
+                                    ),
                                   child: Builder(builder: (context) {
                                     final innerLine = ValueListenableBuilder<bool>(
                                       valueListenable: SettingsService().romanizationEnabled,
@@ -589,6 +662,19 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                                             ? line.transliteratedText!
                                             : line.text;
                                         
+                                        // If timing is 'none', we use a smaller, static style
+                                        if (data.timingType == LyricsTimingType.none) {
+                                          return material.Text(
+                                            effectiveText,
+                                            style: TextStyle(
+                                              color: Colors.white.withValues(alpha: 0.95),
+                                              fontSize: SettingsService().lyricsFontSize.value * 0.8,
+                                              height: 1.6,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          );
+                                        }
+
                                         // If romanized text is being used, we treat it as a static line
                                         // since we don't have word-level timings for the transliteration.
                                         if (line.hasWordTiming && isActive && (!romanize || line.transliteratedText == null)) {
@@ -634,8 +720,9 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                           final isEnded = lineSeconds > line.endTime;
                           // ONLY lit if the line has actually started and not yet ended.
                           // It will NO LONGER lit up early just because it is in focus.
-                          final lit = isStarted && !isEnded;
-                          return buildLine(lit);
+                           // For untimed lyrics, keep all lines "lit up" at full opacity
+                           final lit = (data.timingType == LyricsTimingType.none) ? true : (isStarted && !isEnded);
+                           return buildLine(lit);
                         },
                       );
                     },
@@ -643,7 +730,7 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                   ),
                 ),
               ),
-              if (data.songwriters.isNotEmpty)
+              if (data.songwriters.isNotEmpty && data.timingType != LyricsTimingType.none)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.only(left: 28.0, right: 28.0, bottom: 60.0),
@@ -660,8 +747,56 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                     ),
                   ),
                 ),
-              ],
-            ),
+            ],
+          ),
+        ),
+      ),
+              // Seek Indicator Overlay
+              if (_showSeekIndicator)
+                IgnorePointer(
+                  child: Center(
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.0, end: 1.0),
+                      duration: const Duration(milliseconds: 200),
+                      builder: (context, value, child) {
+                        return Opacity(
+                          opacity: value,
+                          child: Transform.scale(
+                            scale: 0.8 + (value * 0.2),
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: const BoxDecoration(
+                          color: Colors.black45,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _seekDelta > 0 ? Icons.fast_forward_rounded : Icons.fast_rewind_rounded,
+                              color: Colors.white,
+                              size: 48,
+                            ),
+                            const SizedBox(height: 4),
+                            material.Text(
+                              '${_seekDelta > 0 ? '+' : ''}$_seekDelta',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),

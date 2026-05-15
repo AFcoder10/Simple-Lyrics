@@ -12,6 +12,7 @@ import '../widgets/now_playing_header.dart';
 import '../widgets/lyrics_view.dart';
 import '../widgets/playback_controls.dart';
 import '../widgets/playback_controls.dart';
+import '../services/settings_service.dart';
 import '../widgets/backgrounds/background_controller.dart';
 
 /// Main screen that composes all UI widgets.
@@ -31,11 +32,11 @@ class _HomeScreenState extends State<HomeScreen>
   StreamSubscription<MediaState>? _subscription;
   late final Ticker _positionTicker;
   Duration _visualPosition = Duration.zero;
-  static const Duration _newSongLyricsOffset = Duration(milliseconds: 1);
   DateTime _lastPositionTick = DateTime.now();
   bool _hasVisualTrack = false;
   bool _isPreviewingPosition = false;
-  bool _useNewSongLyricsOffset = true;
+  static const Duration _lyricsOffset = Duration(milliseconds: 175);
+  bool _useLyricsOffset = true;
   bool _controlsVisible = true;
   Timer? _hideTimer;
 
@@ -164,7 +165,7 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       if (songChanged) {
         _isPreviewingPosition = false;
-        _useNewSongLyricsOffset = true;
+        _useLyricsOffset = true;
       }
       if (shouldFetchLyrics) {
         _lastFetchedKey = songKey;
@@ -185,22 +186,16 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Duration get _lyricsPosition {
-    if (!_useNewSongLyricsOffset) return _visualPosition;
-
-    final shiftedPosition = _visualPosition + _newSongLyricsOffset;
-    final duration = _mediaState.duration;
-    if (duration > Duration.zero && shiftedPosition > duration) {
-      return duration;
-    }
-    return shiftedPosition;
+    if (!_useLyricsOffset) return _visualPosition;
+    final offsetPos = _visualPosition + _lyricsOffset;
+    return offsetPos < Duration.zero ? Duration.zero : offsetPos;
   }
 
-  void _clearNewSongLyricsOffset() {
-    if (!_useNewSongLyricsOffset) return;
-    setState(() {
-      _useNewSongLyricsOffset = false;
-    });
+  void _clearLyricsOffset() {
+    if (!_useLyricsOffset) return;
+    setState(() => _useLyricsOffset = false);
   }
+
 
   Future<void> _fetchLyrics(
       String title, String artist, String songKey) async {
@@ -338,7 +333,7 @@ class _HomeScreenState extends State<HomeScreen>
                         position: _lyricsPosition,
                         duration: _mediaState.duration,
                         service: widget.service,
-                        onLyricsInteraction: _clearNewSongLyricsOffset,
+                        onLyricsInteraction: _clearLyricsOffset,
                         isLoading: _lyricsLoading,
                         errorMessage: _lyricsError,
                       ),

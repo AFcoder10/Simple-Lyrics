@@ -97,6 +97,7 @@ class AppearanceSettingsScreen extends StatelessWidget {
               );
             },
           ),
+          const SizedBox(height: 20),
         ],
       ),
     );

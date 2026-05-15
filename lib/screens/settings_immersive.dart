@@ -27,7 +27,7 @@ class ImmersiveEffectsSettingsScreen extends StatelessWidget {
         children: [
           _buildSettingTile(
             title: '3D Parallax',
-            subtitle: 'Smooth floating depth using gyroscope',
+            subtitle: 'Smooth floating depth for lyrics',
             icon: Icons.unfold_more_rounded,
             trailing: ValueListenableBuilder<bool>(
               valueListenable: settings.parallaxEnabled,

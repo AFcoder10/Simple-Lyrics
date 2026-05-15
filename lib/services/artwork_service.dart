@@ -6,7 +6,7 @@ import 'cache_service.dart';
 /// Fetches fallback artwork from the public iTunes Search API.
 class ArtworkService {
   static const int _largeArtworkSize = 600;
-  static const int _smallArtworkSize = 120;
+  static const int _smallArtworkSize = 600;
   final HttpClient _client = HttpClient();
   final Map<String, ArtworkResult?> _cache = {};
 

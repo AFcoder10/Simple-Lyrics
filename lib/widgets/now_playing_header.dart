@@ -112,15 +112,11 @@ class NowPlayingHeader extends StatelessWidget {
             animation: animation,
             builder: (context, _) {
               // During push, animation goes 0 -> 1. During pop, animation goes 1 -> 0.
-              // We want a smooth lerp between 12 and 28.
-              final double t = direction == HeroFlightDirection.push 
-                  ? animation.value 
-                  : 1.0 - animation.value;
-
+              // We want a smooth lerp between 12 (small header) and 28 (large expanded).
               final radius = BorderRadius.lerp(
                 BorderRadius.circular(12),
                 BorderRadius.circular(28),
-                direction == HeroFlightDirection.push ? animation.value : 1.0 - animation.value,
+                animation.value,
               );
 
               return Container(
@@ -151,9 +147,9 @@ class NowPlayingHeader extends StatelessWidget {
               ? Image.memory(
                   artBytes,
                   fit: BoxFit.cover,
-                  cacheWidth: 112,
-                  cacheHeight: 112,
-                  filterQuality: FilterQuality.medium,
+                  cacheWidth: 300,
+                  cacheHeight: 300,
+                  filterQuality: FilterQuality.high,
                   gaplessPlayback: true,
                 )
               : Container(

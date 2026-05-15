@@ -1,24 +1,43 @@
-# Simple Lyrics
+<p align="center">
+  <img src="icon.png" width="100" alt="Simple Lyrics"/>
+</p>
 
-A minimalist and high-performance lyrics viewer for Android that integrates with your media playback to show real-time synced lyrics.
+<h1 align="center">Simple Lyrics</h1>
+
+<p align="center">
+  A minimalist lyrics viewer for Android with real-time synced playback.
+</p>
+
+<p align="center">
+  <a href="https://github.com/AFcoder10/Simple-Lyrics/releases"><img src="https://img.shields.io/github/v/release/AFcoder10/Simple-Lyrics?style=flat-square&color=blue" alt="Release"/></a>
+  <a href="https://github.com/AFcoder10/Simple-Lyrics/blob/main/LICENSE"><img src="https://img.shields.io/github/license/AFcoder10/Simple-Lyrics?style=flat-square&color=green" alt="License"/></a>
+</p>
+
+---
+
+<p align="center">
+  <img src="assets/screenshots/1.png" width="230" alt="Lyrics"/>
+  &nbsp;
+  <img src="assets/screenshots/2.png" width="230" alt="Artwork"/>
+  &nbsp;
+  <img src="assets/screenshots/3.png" width="230" alt="Settings"/>
+</p>
+
+---
 
 ## Features
-- **Synced Lyrics**: Real-time display for currently playing tracks.
-- **Premium UI**: Fluid blur backgrounds and 3D parallax effects.
-- **Haptic Feedback**: Feel the rhythm with synchronized vibrations.
-- **Offline First**: Automatic caching for lyrics and artwork.
-- **Privacy Focused**: 100% open source with no trackers.
 
-## How to Install
-- **F-Droid**: Coming soon.
-- **Direct Download**: Check the [Releases](https://github.com/AFcoder10/Simple-Lyrics/releases) page for the latest APK , You would need to disable play protect in order to install apk.
+- **Synced Lyrics** — Real-time karaoke-style display for the currently playing track.
+- **Premium UI** — Fluid blur backgrounds, 3D parallax, and smooth animations.
+- **Haptic Feedback** — Word-level synchronized vibrations.
+- **Offline First** — Automatic caching for lyrics and artwork.
+- **Privacy Focused** — Open source, no trackers, no ads.
 
-## Development
-This app is built with Flutter.
-```bash
-flutter pub get
-flutter run --release
-```
+## Install
+
+- **F-Droid** — Coming soon.
+- **Direct** — [Releases](https://github.com/AFcoder10/Simple-Lyrics/releases)
 
 ## License
-This project is licensed under the **GNU General Public License v3.0**. See the [LICENSE](LICENSE) file for details.
+
+[GPL-3.0](LICENSE)

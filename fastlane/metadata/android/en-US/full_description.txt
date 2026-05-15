@@ -1,0 +1,10 @@
+Simple Lyrics is a minimalist and high-performance lyrics viewer for Android that integrates seamlessly with your media playback to show real-time synced lyrics.
+
+Features:
+- Synced Lyrics: Real-time display for currently playing tracks.
+- Premium UI: Fluid blur backgrounds and 3D parallax effects for a modern look.
+- Haptic Feedback: Feel the rhythm with synchronized vibrations that move with the music.
+- Offline First: Automatic caching for lyrics and artwork ensures you always have your content.
+- Privacy Focused: 100% open source with no trackers, advertisements, or proprietary blobs.
+
+Enjoy a clean, focused listening experience with Simple Lyrics.

@@ -95,6 +95,8 @@ class NowPlayingHeader extends StatelessWidget {
               artBytes: mediaState.albumArtBytes ?? mediaState.thumbnailArtBytes,
               title: mediaState.title,
               artist: mediaState.artist,
+              mediaState: mediaState,
+              service: service,
             ),
             transitionsBuilder: (context, animation, _, child) {
               return FadeTransition(opacity: animation, child: child);

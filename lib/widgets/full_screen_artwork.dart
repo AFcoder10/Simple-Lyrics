@@ -1,22 +1,108 @@
 import 'dart:typed_data';
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
-class FullScreenArtwork extends StatelessWidget {
+import '../models/media_state.dart';
+import '../services/media_session_service.dart';
+import 'playback_controls.dart';
+
+class FullScreenArtwork extends StatefulWidget {
   final Uint8List? artBytes;
   final String title;
   final String artist;
+  final MediaState mediaState;
+  final MediaSessionService service;
 
   const FullScreenArtwork({
     super.key,
     required this.artBytes,
     required this.title,
     required this.artist,
+    required this.mediaState,
+    required this.service,
   });
+
+  @override
+  State<FullScreenArtwork> createState() => _FullScreenArtworkState();
+}
+
+class _FullScreenArtworkState extends State<FullScreenArtwork>
+    with SingleTickerProviderStateMixin {
+  late MediaState _mediaState;
+  late Duration _visualPosition;
+  DateTime _lastPositionTick = DateTime.now();
+  late final Ticker _positionTicker;
+  StreamSubscription<MediaState>? _subscription;
+  bool _isPreviewingPosition = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _mediaState = widget.mediaState;
+    _visualPosition = widget.mediaState.position;
+    _positionTicker = createTicker((_) => _tickVisualPosition())..start();
+    _subscription = widget.service.mediaStateStream.listen(_onMediaStateUpdate);
+  }
+
+  void _onMediaStateUpdate(MediaState state) {
+    if (!mounted) return;
+    setState(() {
+      _mediaState = state;
+      // Sync position if it drifts too much or if song changes
+      final delta = (state.position.inMilliseconds - _visualPosition.inMilliseconds).abs();
+      if (delta > 1000 || state.title != _mediaState.title) {
+        _visualPosition = state.position;
+      }
+    });
+  }
+
+  void _tickVisualPosition() {
+    final now = DateTime.now();
+    final elapsed = now.difference(_lastPositionTick);
+    _lastPositionTick = now;
+
+    if (_isPreviewingPosition || !_mediaState.isPlaying || _mediaState.isEmpty) {
+      return;
+    }
+
+    final duration = _mediaState.duration;
+    final nextPosition = duration > Duration.zero &&
+            _visualPosition + elapsed > duration
+        ? duration
+        : _visualPosition + elapsed;
+
+    if (nextPosition == _visualPosition) return;
+
+    setState(() {
+      _visualPosition = nextPosition;
+    });
+  }
+
+  void _previewVisualPosition(Duration position) {
+    final duration = _mediaState.duration;
+    final clampedPosition = duration > Duration.zero && position > duration
+        ? duration
+        : position;
+
+    setState(() {
+      _visualPosition = clampedPosition;
+      _lastPositionTick = DateTime.now();
+    });
+  }
+
+  @override
+  void dispose() {
+    _positionTicker.dispose();
+    _subscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size.width * 0.85;
+    final visualMediaState = _mediaState.copyWith(position: _visualPosition);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -72,9 +158,9 @@ class FullScreenArtwork extends StatelessWidget {
                           ],
                         ),
                         clipBehavior: Clip.antiAlias,
-                        child: artBytes != null && artBytes!.isNotEmpty
+                        child: widget.artBytes != null && widget.artBytes!.isNotEmpty
                             ? Image.memory(
-                                artBytes!,
+                                widget.artBytes!,
                                 fit: BoxFit.cover,
                               )
                             : Container(
@@ -97,7 +183,7 @@ class FullScreenArtwork extends StatelessWidget {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 40),
                           child: Text(
-                            title,
+                            _mediaState.title,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontFamily: 'Display',
@@ -116,7 +202,7 @@ class FullScreenArtwork extends StatelessWidget {
                       child: Material(
                         type: MaterialType.transparency,
                         child: Text(
-                          artist,
+                          _mediaState.artist,
                           style: TextStyle(
                             fontFamily: 'Display',
                             color: Colors.white.withValues(alpha: 0.6),
@@ -130,6 +216,15 @@ class FullScreenArtwork extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+          // Playback Controls
+          PlaybackControls(
+            mediaState: visualMediaState,
+            service: widget.service,
+            visible: true,
+            onInteraction: () {},
+            onPositionPreview: _previewVisualPosition,
+            onPositionPreviewing: (val) => setState(() => _isPreviewingPosition = val),
           ),
         ],
       ),

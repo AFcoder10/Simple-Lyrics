@@ -35,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen>
   DateTime _lastPositionTick = DateTime.now();
   bool _hasVisualTrack = false;
   bool _isPreviewingPosition = false;
-  static const Duration _lyricsOffset = Duration(milliseconds: 175);
+  static const Duration _lyricsOffset = Duration(milliseconds: 150);
   bool _useLyricsOffset = true;
   bool _controlsVisible = true;
   Timer? _hideTimer;
@@ -350,6 +350,20 @@ class _HomeScreenState extends State<HomeScreen>
                 onPositionPreview: _previewVisualPosition,
                 onPositionPreviewing: _setPositionPreviewing,
               ),
+
+              // Bottom touch area to reveal controls
+              if (!_controlsVisible)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 160,
+                  child: GestureDetector(
+                    onTap: _onInteraction,
+                    behavior: HitTestBehavior.translucent,
+                    child: Container(color: Colors.transparent),
+                  ),
+                ),
             ],
           ),
         ),

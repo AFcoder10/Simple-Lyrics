@@ -64,7 +64,7 @@ jobs:
         with:
           tag_name: ${{ needs.check-version.outputs.version }}
           name: ${{ needs.check-version.outputs.version }}
-          body_path: release_notes.md
+          body: "Release of ${{ needs.check-version.outputs.version }}"
           files: |
             Simple-Lyrics.apk
           token: ${{ secrets.GITHUB_TOKEN }}

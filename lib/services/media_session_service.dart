@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../models/media_state.dart';
@@ -36,6 +37,24 @@ class MediaSessionService {
 
   /// The current media state snapshot.
   MediaState get currentState => _currentState;
+
+  /// Publish artwork updates sourced from the Flutter side (iTunes fetch).
+  void updateArtworkForSong({
+    required String title,
+    required String artist,
+    required Uint8List? artworkBytes,
+    Uint8List? thumbnailBytes,
+  }) {
+    if (_currentState.title != title || _currentState.artist != artist) {
+      return;
+    }
+
+    _currentState = _currentState.copyWithArtwork(
+      artworkBytes,
+      thumbnailBytes: thumbnailBytes,
+    );
+    _stateController.add(_currentState);
+  }
 
   /// Initialize the service and start listening to native events.
   void init() {

@@ -48,11 +48,14 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
 
   void _onMediaStateUpdate(MediaState state) {
     if (!mounted) return;
+    final previousState = _mediaState;
     setState(() {
       _mediaState = state;
       // Sync position if it drifts too much or if song changes
       final delta = (state.position.inMilliseconds - _visualPosition.inMilliseconds).abs();
-      if (delta > 1000 || state.title != _mediaState.title) {
+      final songChanged = state.title != previousState.title ||
+          state.artist != previousState.artist;
+      if (delta > 1000 || songChanged) {
         _visualPosition = state.position;
       }
     });
@@ -158,21 +161,35 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                           ],
                         ),
                         clipBehavior: Clip.antiAlias,
-                        child: widget.artBytes != null && widget.artBytes!.isNotEmpty
-                            ? Image.memory(
-                                widget.artBytes!,
-                                fit: BoxFit.cover,
-                              )
-                            : Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [Colors.grey.shade800, Colors.grey.shade900],
-                                  ),
-                                ),
-                                child: const Icon(Icons.music_note_rounded, color: Colors.white38, size: 80),
+                        child: () {
+                          final songChanged = _mediaState.title != widget.title || 
+                                              _mediaState.artist != widget.artist;
+                          
+                          // Use high-res if available, else thumbnail. 
+                          // ONLY use widget.artBytes if the song is still the same one we opened with.
+                          final art = _mediaState.albumArtBytes ?? 
+                                     (songChanged ? null : widget.artBytes) ?? 
+                                     _mediaState.thumbnailArtBytes;
+                          
+                          if (art != null && art.isNotEmpty) {
+                            return Image.memory(
+                              art,
+                              fit: BoxFit.cover,
+                              gaplessPlayback: true,
+                            );
+                          }
+                          
+                          return Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Colors.grey.shade800, Colors.grey.shade900],
                               ),
+                            ),
+                            child: const Icon(Icons.music_note_rounded, color: Colors.white38, size: 80),
+                          );
+                        }(),
                       ),
                     ),
                     const SizedBox(height: 40),

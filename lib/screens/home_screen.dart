@@ -259,6 +259,13 @@ class _HomeScreenState extends State<HomeScreen>
       _lastArtworkFetchKey = songKey;
       _artworkFetchInFlightKey = null;
     });
+
+    widget.service.updateArtworkForSong(
+      title: _mediaState.title,
+      artist: _mediaState.artist,
+      artworkBytes: _mediaState.albumArtBytes,
+      thumbnailBytes: _mediaState.thumbnailArtBytes,
+    );
   }
 
   @override

@@ -26,6 +26,9 @@ android {
         jvmTarget = "17"
     }
 
+    val targetPlatform = project.findProperty("target-platform") as String?
+    val isSingleAbi = targetPlatform != null && !targetPlatform.contains(",")
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.simplelyrics.simple_lyrics"
@@ -35,6 +38,14 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Fix for GitHub Workflow / F-Droid splits conflict:
+        // Clear abiFilters when splits are enabled to avoid "Conflicting configuration" error.
+        if (!isSingleAbi) {
+            ndk {
+                abiFilters.clear()
+            }
+        }
     }
 
     buildTypes {
@@ -46,9 +57,6 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
-
-    val targetPlatform = project.findProperty("target-platform") as String?
-    val isSingleAbi = targetPlatform != null && !targetPlatform.contains(",")
 
     splits {
         abi {

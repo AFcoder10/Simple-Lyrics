@@ -1,4 +1,5 @@
 name: simple_lyrics
+# f-droid-flutter: 3.41.9
 description: "A lyrics viewer with Android media playback integration"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.

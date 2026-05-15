@@ -86,7 +86,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                 child: SafeArea(
                   top: false,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -118,7 +118,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
       children: [
         SliderTheme(
           data: SliderThemeData(
-            trackHeight: 4,
+            trackHeight: 6,
             trackShape: const RoundedRectSliderTrackShape(),
             thumbShape: SliderComponentShape.noThumb,
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 0),
@@ -179,13 +179,8 @@ class _PlaybackControlsState extends State<PlaybackControls> {
 
   Widget _buildMainControlsRow() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _SecondaryControl(
-          icon: widget.mediaState.shuffleMode == 0 ? Icons.shuffle_rounded : Icons.shuffle_on_rounded,
-          isActive: widget.mediaState.shuffleMode != 0,
-          onTap: () => widget.service.setShuffleMode(widget.mediaState.shuffleMode == 0 ? 1 : 0),
-        ),
         _TransportButton(
           icon: Icons.skip_previous_rounded,
           size: 40,
@@ -194,6 +189,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
             widget.service.previous();
           },
         ),
+        const SizedBox(width: 32),
         _PlayPauseButton(
           isPlaying: widget.mediaState.isPlaying,
           onTap: () {
@@ -205,6 +201,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
             }
           },
         ),
+        const SizedBox(width: 32),
         _TransportButton(
           icon: Icons.skip_next_rounded,
           size: 40,
@@ -212,11 +209,6 @@ class _PlaybackControlsState extends State<PlaybackControls> {
             widget.onInteraction();
             widget.service.next();
           },
-        ),
-        _SecondaryControl(
-          icon: widget.mediaState.repeatMode == 0 ? Icons.repeat_rounded : Icons.repeat_on_rounded,
-          isActive: widget.mediaState.repeatMode != 0,
-          onTap: () => widget.service.setRepeatMode(widget.mediaState.repeatMode == 0 ? 1 : 0),
         ),
       ],
     );
@@ -278,11 +270,7 @@ class _TransportButtonState extends State<_TransportButton>
               height: 52,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.12),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  width: 0.5,
-                ),
+                color: Colors.white.withValues(alpha: 0.10),
               ),
               child: Icon(
                 widget.icon,
@@ -308,9 +296,8 @@ class _PlayPauseButton extends StatefulWidget {
 }
 
 class _PlayPauseButtonState extends State<_PlayPauseButton>
-    with TickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   late final AnimationController _pressController;
-  late final AnimationController _iconController;
 
   @override
   void initState() {
@@ -320,29 +307,11 @@ class _PlayPauseButtonState extends State<_PlayPauseButton>
       duration: const Duration(milliseconds: 100),
       reverseDuration: const Duration(milliseconds: 250),
     );
-    _iconController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-      value: widget.isPlaying ? 1.0 : 0.0,
-    );
-  }
-
-  @override
-  void didUpdateWidget(_PlayPauseButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isPlaying != oldWidget.isPlaying) {
-      if (widget.isPlaying) {
-        _iconController.forward();
-      } else {
-        _iconController.reverse();
-      }
-    }
   }
 
   @override
   void dispose() {
     _pressController.dispose();
-    _iconController.dispose();
     super.dispose();
   }
 
@@ -359,34 +328,24 @@ class _PlayPauseButtonState extends State<_PlayPauseButton>
         ),
         child: ClipOval(
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: Container(
               width: 68,
               height: 68,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.92),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    blurRadius: 24,
-                    spreadRadius: 2,
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
+                color: Colors.white.withValues(alpha: 0.10),
               ),
-              child: AnimatedIcon(
-                icon: AnimatedIcons.play_pause,
-                progress: CurvedAnimation(
-                  parent: _iconController,
-                  curve: Curves.easeInOutCubic,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: Icon(
+                  widget.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  key: ValueKey(widget.isPlaying),
+                  size: 38,
+                  color: Colors.white,
                 ),
-                size: 38,
-                color: Colors.black,
               ),
             ),
           ),

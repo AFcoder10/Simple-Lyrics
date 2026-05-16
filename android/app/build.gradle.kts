@@ -26,8 +26,6 @@ android {
         jvmTarget = "17"
     }
 
-    val targetPlatform = project.findProperty("target-platform") as String?
-    val isSingleAbi = targetPlatform != null && !targetPlatform.contains(",")
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
@@ -38,14 +36,6 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-
-        // Fix for GitHub Workflow / F-Droid splits conflict:
-        // Clear abiFilters when splits are enabled to avoid "Conflicting configuration" error.
-        if (!isSingleAbi) {
-            ndk {
-                abiFilters.clear()
-            }
-        }
     }
 
     buildTypes {
@@ -58,14 +48,6 @@ android {
         }
     }
 
-    splits {
-        abi {
-            isEnable = !isSingleAbi
-            reset()
-            include("armeabi-v7a", "arm64-v8a", "x86_64")
-            isUniversalApk = false
-        }
-    }
 
     packaging {
         // F-Droid: Exclude Play Core classes from the APK

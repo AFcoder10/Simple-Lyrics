@@ -114,54 +114,51 @@ class NowPlayingHeader extends StatelessWidget {
       child: Hero(
         tag: 'album_art',
         flightShuttleBuilder: (context, animation, direction, fromContext, toContext) {
-          final Hero toHero = toContext.widget as Hero;
-          final Hero fromHero = fromContext.widget as Hero;
+          // Cache the shadow to avoid recreating on every frame
+          const shadow = BoxShadow(
+            color: Color.fromARGB(64, 0, 0, 0),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          );
+          
           return Center(
             child: AspectRatio(
               aspectRatio: 1.0,
-              child: AnimatedBuilder(
-                animation: animation,
-                builder: (context, _) {
-                  // During push, animation goes 0 -> 1. During pop, animation goes 1 -> 0.
-                  // We want a smooth lerp between 12 (small header) and 28 (large expanded).
-                  final radius = BorderRadius.lerp(
-                    BorderRadius.circular(12),
-                    BorderRadius.circular(28),
-                    animation.value,
-                  );
+              child: RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: animation,
+                  builder: (context, _) {
+                    // Lerp radius between small (12) and large (28)
+                    final t = animation.value;
+                    final radius = 12.0 + (28.0 - 12.0) * t;
 
-                  return Container(
-                    decoration: BoxDecoration(
-                      borderRadius: radius,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 16,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: SizedBox.expand(
-                      child: artBytes != null && artBytes.isNotEmpty
-                          ? Image.memory(
-                              artBytes,
-                              fit: BoxFit.cover,
-                              gaplessPlayback: true,
-                            )
-                          : Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [Colors.grey.shade800, Colors.grey.shade900],
+                    return Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(radius),
+                        boxShadow: const [shadow],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: SizedBox.expand(
+                        child: artBytes != null && artBytes.isNotEmpty
+                            ? Image.memory(
+                                artBytes,
+                                fit: BoxFit.cover,
+                                gaplessPlayback: true,
+                              )
+                            : Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [Colors.grey.shade800, Colors.grey.shade900],
+                                  ),
                                 ),
+                                child: const Icon(Icons.music_note_rounded, color: Colors.white38),
                               ),
-                              child: const Icon(Icons.music_note_rounded, color: Colors.white38),
-                            ),
-                    ),
-                  );
-                },
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
           );

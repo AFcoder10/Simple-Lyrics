@@ -125,22 +125,24 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // Dynamic Blur Background
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.0, end: 1.0),
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOutCubic,
-            builder: (context, value, child) {
-              return BackdropFilter(
-                filter: ImageFilter.blur(
-                  sigmaX: value * 25,
-                  sigmaY: value * 25,
-                ),
-                child: Container(
-                  color: Colors.black.withValues(alpha: value * 0.6),
-                ),
-              );
-            },
+          // Dynamic Blur Background (isolated with RepaintBoundary)
+          RepaintBoundary(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: 1.0),
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) {
+                return BackdropFilter(
+                  filter: ImageFilter.blur(
+                    sigmaX: value * 25,
+                    sigmaY: value * 25,
+                  ),
+                  child: Container(
+                    color: Colors.black.withValues(alpha: value * 0.6),
+                  ),
+                );
+              },
+            ),
           ),
           // Interactive Layer
           GestureDetector(
@@ -158,52 +160,54 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Hero(
-                      tag: 'album_art',
-                      child: Container(
-                        width: size,
-                        height: size,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(28),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              blurRadius: 40,
-                              spreadRadius: 4,
-                              offset: const Offset(0, 20),
-                            ),
-                          ],
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: () {
-                          final songChanged = _mediaState.title != widget.title || 
-                                              _mediaState.artist != widget.artist;
-                          
-                          // Use high-res if available, else thumbnail. 
-                          // ONLY use widget.artBytes if the song is still the same one we opened with.
-                          final art = _mediaState.albumArtBytes ?? 
-                                     (songChanged ? null : widget.artBytes) ?? 
-                                     _mediaState.thumbnailArtBytes;
-                          
-                          if (art != null && art.isNotEmpty) {
-                            return Image.memory(
-                              art,
-                              fit: BoxFit.cover,
-                              gaplessPlayback: true,
-                            );
-                          }
-                          
-                          return Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Colors.grey.shade800, Colors.grey.shade900],
+                    RepaintBoundary(
+                      child: Hero(
+                        tag: 'album_art',
+                        child: Container(
+                          width: size,
+                          height: size,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(28),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                blurRadius: 40,
+                                spreadRadius: 4,
+                                offset: const Offset(0, 20),
                               ),
-                            ),
-                            child: const Icon(Icons.music_note_rounded, color: Colors.white38, size: 80),
-                          );
-                        }(),
+                            ],
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: () {
+                            final songChanged = _mediaState.title != widget.title || 
+                                                _mediaState.artist != widget.artist;
+                            
+                            // Use high-res if available, else thumbnail. 
+                            // ONLY use widget.artBytes if the song is still the same one we opened with.
+                            final art = _mediaState.albumArtBytes ?? 
+                                       (songChanged ? null : widget.artBytes) ?? 
+                                       _mediaState.thumbnailArtBytes;
+                            
+                            if (art != null && art.isNotEmpty) {
+                              return Image.memory(
+                                art,
+                                fit: BoxFit.cover,
+                                gaplessPlayback: true,
+                              );
+                            }
+                            
+                            return Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [Colors.grey.shade800, Colors.grey.shade900],
+                                ),
+                              ),
+                              child: const Icon(Icons.music_note_rounded, color: Colors.white38, size: 80),
+                            );
+                          }(),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 32),

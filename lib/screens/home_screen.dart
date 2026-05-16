@@ -35,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen>
   DateTime _lastPositionTick = DateTime.now();
   bool _hasVisualTrack = false;
   bool _isPreviewingPosition = false;
-  static const Duration _lyricsOffset = Duration(milliseconds: 150);
+  static const Duration _lyricsOffset = Duration(milliseconds: 0);
   bool _useLyricsOffset = true;
   bool _controlsVisible = true;
   Timer? _hideTimer;

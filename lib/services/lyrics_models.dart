@@ -21,11 +21,13 @@ class LyricsWord {
   final String text;
   final double startTime;
   final double endTime;
+  final String? transliteratedText;
 
   const LyricsWord({
     required this.text,
     required this.startTime,
     required this.endTime,
+    this.transliteratedText,
   });
 
   /// Check if this word should be highlighted at the given position.
@@ -62,6 +64,9 @@ class LyricsLine {
   /// Transliterated version of the text (e.g. Romanized), if available.
   final String? transliteratedText;
 
+  /// Individual transliterated words with their own timings.
+  final List<LyricsWord>? transliteratedWords;
+
   const LyricsLine({
     required this.text,
     required this.startTime,
@@ -70,6 +75,7 @@ class LyricsLine {
     this.isBackground = false,
     this.alignment = LyricsLineAlignment.left,
     this.transliteratedText,
+    this.transliteratedWords,
   });
 
   /// Whether this line has per-word timing data.

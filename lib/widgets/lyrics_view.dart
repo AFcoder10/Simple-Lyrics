@@ -675,19 +675,21 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                                           );
                                         }
 
-                                        // If romanized text is being used, we treat it as a static line
-                                        // since we don't have word-level timings for the transliteration.
-                                        if (line.hasWordTiming && isActive && (!romanize || line.transliteratedText == null)) {
+                                        // If romanized text is being used, we check if word-level transliterations exist.
+                                        // If the line has word timing, we animate it word-by-word.
+                                        if (line.hasWordTiming && isActive) {
                                           return _ActiveWordLine(
                                             line: line,
                                             smoothSeconds: _smoothSeconds,
+                                            romanize: romanize,
                                           );
                                         } else {
                                           return RepaintBoundary(
-                                            child: line.hasWordTiming && (!romanize || line.transliteratedText == null)
+                                            child: line.hasWordTiming
                                               ? _ActiveWordLine(
                                                   line: line, 
                                                   smoothSeconds: _smoothSeconds,
+                                                  romanize: romanize,
                                                 )
                                               : _StaticLine(line: line, text: effectiveText),
                                           );
@@ -807,10 +809,12 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
 class _ActiveWordLine extends StatefulWidget {
   final LyricsLine line;
   final ValueNotifier<double> smoothSeconds;
+  final bool romanize;
 
   const _ActiveWordLine({
     required this.line,
     required this.smoothSeconds,
+    this.romanize = false,
   });
 
   @override
@@ -937,7 +941,10 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
                 : WrapAlignment.start,
             spacing: 0,
             runSpacing: 4,
-            children: widget.line.words.map((word) {
+            children: (widget.romanize && widget.line.transliteratedWords != null && widget.line.transliteratedWords!.isNotEmpty
+                    ? widget.line.transliteratedWords!
+                    : widget.line.words)
+                .map((word) {
               final dur = word.endTime - word.startTime;
               double progress;
               
@@ -960,7 +967,7 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
               return Transform.translate(
                 offset: Offset(0, liftOffset),
                 child: KaraokeTextFill(
-                  text: word.text,
+                  text: widget.romanize && word.transliteratedText != null ? word.transliteratedText! : word.text,
                   progress: progress.clamp(0.0, 1.0),
                   longHold: isLongHold,
                   elapsedSeconds: lineSeconds - word.startTime,

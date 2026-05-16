@@ -58,10 +58,8 @@ class _PlaybackControlsState extends State<PlaybackControls> {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
+    return Align(
+      alignment: Alignment.bottomCenter,
       child: IgnorePointer(
         ignoring: !widget.visible,
         child: AnimatedOpacity(

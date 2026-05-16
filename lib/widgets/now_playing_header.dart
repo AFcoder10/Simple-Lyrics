@@ -91,6 +91,8 @@ class NowPlayingHeader extends StatelessWidget {
           PageRouteBuilder(
             opaque: false,
             barrierColor: Colors.black.withValues(alpha: 0.8),
+            transitionDuration: const Duration(milliseconds: 550),
+            reverseTransitionDuration: const Duration(milliseconds: 450),
             pageBuilder: (context, _, __) => FullScreenArtwork(
               artBytes: mediaState.albumArtBytes ?? mediaState.thumbnailArtBytes,
               title: mediaState.title,
@@ -99,7 +101,12 @@ class NowPlayingHeader extends StatelessWidget {
               service: service,
             ),
             transitionsBuilder: (context, animation, _, child) {
-              return FadeTransition(opacity: animation, child: child);
+              final fadeAnimation = CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+                reverseCurve: Curves.easeInCubic,
+              );
+              return FadeTransition(opacity: fadeAnimation, child: child);
             },
           ),
         );
@@ -109,26 +116,54 @@ class NowPlayingHeader extends StatelessWidget {
         flightShuttleBuilder: (context, animation, direction, fromContext, toContext) {
           final Hero toHero = toContext.widget as Hero;
           final Hero fromHero = fromContext.widget as Hero;
-          
-          return AnimatedBuilder(
-            animation: animation,
-            builder: (context, _) {
-              // During push, animation goes 0 -> 1. During pop, animation goes 1 -> 0.
-              // We want a smooth lerp between 12 (small header) and 28 (large expanded).
-              final radius = BorderRadius.lerp(
-                BorderRadius.circular(12),
-                BorderRadius.circular(28),
-                animation.value,
-              );
+          return Center(
+            child: AspectRatio(
+              aspectRatio: 1.0,
+              child: AnimatedBuilder(
+                animation: animation,
+                builder: (context, _) {
+                  // During push, animation goes 0 -> 1. During pop, animation goes 1 -> 0.
+                  // We want a smooth lerp between 12 (small header) and 28 (large expanded).
+                  final radius = BorderRadius.lerp(
+                    BorderRadius.circular(12),
+                    BorderRadius.circular(28),
+                    animation.value,
+                  );
 
-              return Container(
-                decoration: BoxDecoration(
-                  borderRadius: radius,
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: direction == HeroFlightDirection.push ? fromHero.child : toHero.child,
-              );
-            },
+                  return Container(
+                    decoration: BoxDecoration(
+                      borderRadius: radius,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: SizedBox.expand(
+                      child: artBytes != null && artBytes.isNotEmpty
+                          ? Image.memory(
+                              artBytes,
+                              fit: BoxFit.cover,
+                              gaplessPlayback: true,
+                            )
+                          : Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [Colors.grey.shade800, Colors.grey.shade900],
+                                ),
+                              ),
+                              child: const Icon(Icons.music_note_rounded, color: Colors.white38),
+                            ),
+                    ),
+                  );
+                },
+              ),
+            ),
           );
         },
         child: Container(
@@ -175,37 +210,31 @@ class NowPlayingHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Hero(
-          tag: 'song_title',
-          child: Material(
-            type: MaterialType.transparency,
-            child: _MarqueeText(
-              text: title,
-              style: const TextStyle(
-                fontFamily: 'Display',
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-                height: 1.1,
-              ),
+        Material(
+          type: MaterialType.transparency,
+          child: _MarqueeText(
+            text: title,
+            style: const TextStyle(
+              fontFamily: 'Display',
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+              height: 1.1,
             ),
           ),
         ),
         const SizedBox(height: 4),
-        Hero(
-          tag: 'song_artist',
-          child: Material(
-            type: MaterialType.transparency,
-            child: _MarqueeText(
-              text: artist,
-              style: TextStyle(
-                fontFamily: 'Display',
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                letterSpacing: -0.2,
-              ),
+        Material(
+          type: MaterialType.transparency,
+          child: _MarqueeText(
+            text: artist,
+            style: TextStyle(
+              fontFamily: 'Display',
+              color: Colors.white.withValues(alpha: 0.7),
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              letterSpacing: -0.2,
             ),
           ),
         ),

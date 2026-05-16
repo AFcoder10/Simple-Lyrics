@@ -95,7 +95,8 @@ class TtmlParser {
             timingType: timingType,
             isBackground: isParagraphBackground,
             alignment: alignment,
-            transliteratedText: transliterated,
+            transliteratedHtml: transliterated,
+            transliterationMap: transliterationMap,
           );
 
           if (!isParagraphBackground) {
@@ -108,7 +109,8 @@ class TtmlParser {
                 timingType: timingType,
                 isBackground: true,
                 alignment: alignment,
-                transliteratedText: null, // Transliteration usually only applies to lead vocals in AM TTML
+                transliteratedHtml: null, // Transliteration usually only applies to lead vocals in AM TTML
+                transliterationMap: transliterationMap,
               );
             }
           }
@@ -168,9 +170,11 @@ class TtmlParser {
     required LyricsTimingType timingType,
     required bool isBackground,
     required LyricsLineAlignment alignment,
-    String? transliteratedText,
+    String? transliteratedHtml,
+    Map<String, String>? transliterationMap,
   }) {
-    final parsedWords = _parseWords(html);
+    final parsedWords = _parseWords(html, transliterationMap);
+    final transliteratedWords = transliteratedHtml != null ? _parseWords(transliteratedHtml, transliterationMap) : null;
     final words = isBackground
         ? parsedWords
             .map(
@@ -178,6 +182,7 @@ class TtmlParser {
                 text: word.text.replaceAll('(', '').replaceAll(')', ''),
                 startTime: word.startTime,
                 endTime: word.endTime,
+                transliteratedText: word.transliteratedText,
               ),
             )
             .toList()
@@ -213,7 +218,8 @@ class TtmlParser {
         words: timingType == LyricsTimingType.word ? words : [],
         isBackground: isBackground,
         alignment: alignment,
-        transliteratedText: transliteratedText,
+        transliteratedText: transliteratedHtml != null ? _extractText(transliteratedHtml).trim() : null,
+        transliteratedWords: transliteratedWords,
       ),
     );
   }
@@ -235,9 +241,9 @@ class TtmlParser {
     final entryRegex = RegExp(r'<text\b[^>]*for="([^"]+)"[^>]*>(.*?)</text>', dotAll: true);
     for (final match in entryRegex.allMatches(inner)) {
       final key = match.group(1)!;
-      final text = _extractText(match.group(2)!).trim();
-      if (text.isNotEmpty) {
-        map[key] = text;
+      final rawHtml = match.group(2)!;
+      if (rawHtml.trim().isNotEmpty) {
+        map[key] = rawHtml;
       }
     }
     return map;
@@ -304,7 +310,7 @@ class TtmlParser {
   );
 
   /// Parse `<span>` elements within a `<p>` to extract word-level timing.
-  static List<LyricsWord> _parseWords(String innerHtml) {
+  static List<LyricsWord> _parseWords(String innerHtml, [Map<String, String>? transliterationMap]) {
     final words = <LyricsWord>[];
 
     for (final match in _timedSpanRegex.allMatches(innerHtml)) {
@@ -320,6 +326,12 @@ class TtmlParser {
         final begin = _parseTime(beginMatch.group(1)!);
         final end = _parseTime(endMatch.group(1)!);
         
+        // Extract transliteration key if available
+        final key = _extractAttribute(attributes, 'itunes:key') ?? 
+                    _extractAttribute(attributes, 'xml:id') ?? 
+                    _extractAttribute(attributes, 'id');
+        final transliterated = (key != null && transliterationMap != null) ? transliterationMap[key] : null;
+
         // Strip any nested tags (syllable tags) and add trailing space
         final text = _extractText(rawText).trim() + trailingSpace;
 
@@ -328,6 +340,7 @@ class TtmlParser {
             text: text,
             startTime: begin,
             endTime: end,
+            transliteratedText: transliterated != null ? transliterated + trailingSpace : null,
           ));
         }
       }

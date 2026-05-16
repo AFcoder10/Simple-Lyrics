@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui';
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -34,6 +34,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
   late Duration _visualPosition;
   DateTime _lastPositionTick = DateTime.now();
   late final Ticker _positionTicker;
+  late final AnimationController _entryController;
   StreamSubscription<MediaState>? _subscription;
   bool _isPreviewingPosition = false;
 
@@ -43,6 +44,10 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
     _mediaState = widget.mediaState;
     _visualPosition = widget.mediaState.position;
     _positionTicker = createTicker((_) => _tickVisualPosition())..start();
+    _entryController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+    )..forward();
     _subscription = widget.service.mediaStateStream.listen(_onMediaStateUpdate);
   }
 
@@ -98,6 +103,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
   @override
   void dispose() {
     _positionTicker.dispose();
+    _entryController.dispose();
     _subscription?.cancel();
     super.dispose();
   }
@@ -106,6 +112,14 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size.width * 0.85;
     final visualMediaState = _mediaState.copyWith(position: _visualPosition);
+    final metadataFade = CurvedAnimation(
+      parent: _entryController,
+      curve: const Interval(0.70, 1.0, curve: Curves.easeOutCubic),
+    );
+    final controlsFade = CurvedAnimation(
+      parent: _entryController,
+      curve: const Interval(0.82, 1.0, curve: Curves.easeOutCubic),
+    );
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -119,7 +133,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
             builder: (context, value, child) {
               return BackdropFilter(
                 filter: ImageFilter.blur(
-                  sigmaX: value * 25, 
+                  sigmaX: value * 25,
                   sigmaY: value * 25,
                 ),
                 child: Container(
@@ -192,41 +206,43 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                         }(),
                       ),
                     ),
-                    const SizedBox(height: 40),
-                    Hero(
-                      tag: 'song_title',
-                      child: Material(
-                        type: MaterialType.transparency,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 40),
-                          child: Text(
-                            _mediaState.title,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontFamily: 'Display',
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
+                    const SizedBox(height: 32),
+                    FadeTransition(
+                      opacity: metadataFade,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Material(
+                            type: MaterialType.transparency,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 40),
+                              child: Text(
+                                _mediaState.title,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontFamily: 'Display',
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Hero(
-                      tag: 'song_artist',
-                      child: Material(
-                        type: MaterialType.transparency,
-                        child: Text(
-                          _mediaState.artist,
-                          style: TextStyle(
-                            fontFamily: 'Display',
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 18,
-                            fontWeight: FontWeight.w500,
+                          const SizedBox(height: 8),
+                          Material(
+                            type: MaterialType.transparency,
+                            child: Text(
+                              _mediaState.artist,
+                              style: TextStyle(
+                                fontFamily: 'Display',
+                                color: Colors.white.withValues(alpha: 0.6),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ],
@@ -234,14 +250,16 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
               ),
             ),
           ),
-          // Playback Controls
-          PlaybackControls(
-            mediaState: visualMediaState,
-            service: widget.service,
-            visible: true,
-            onInteraction: () {},
-            onPositionPreview: _previewVisualPosition,
-            onPositionPreviewing: (val) => setState(() => _isPreviewingPosition = val),
+          FadeTransition(
+            opacity: controlsFade,
+            child: PlaybackControls(
+              mediaState: visualMediaState,
+              service: widget.service,
+              visible: true,
+              onInteraction: () {},
+              onPositionPreview: _previewVisualPosition,
+              onPositionPreviewing: (val) => setState(() => _isPreviewingPosition = val),
+            ),
           ),
         ],
       ),

@@ -230,7 +230,8 @@ class ImmersiveEffectsSettingsScreen extends StatelessWidget {
       transitionBuilder: (child, animation) {
         return SizeTransition(
           sizeFactor: animation,
-          alignment: Alignment.topCenter,
+          axis: Axis.vertical,
+          axisAlignment: -1.0,
           child: FadeTransition(opacity: animation, child: child),
         );
       },

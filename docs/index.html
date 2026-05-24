@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Lyrics - The Immersive Karaoke Experience</title>
+  <meta name="description" content="Experience music like never before. Simple Lyrics offers stunning live artwork, word-to-word animations, and deeply integrated haptics for a premium karaoke experience on Android.">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="assets/icon.png" type="image/png">
+</head>
+<body>
+  
+  <div class="bg-blob blob-1"></div>
+  <div class="bg-blob blob-2"></div>
+  <div class="bg-blob blob-3"></div>
+
+  <div class="container">
+    <header class="fade-up">
+      <div class="logo">
+        <img src="assets/icon.png" alt="Simple Lyrics Icon">
+        Simple Lyrics
+      </div>
+      <a href="https://github.com/AFcoder10/Simple-Lyrics/releases/latest" class="btn-primary" target="_blank" rel="noopener noreferrer">Download APK</a>
+    </header>
+
+    <section class="hero fade-up delay-1">
+      <h1>Feel Every Word.</h1>
+      <p>Transform your Android device into a premium karaoke machine. Featuring flawless Apple Music-style live artwork, precision word-by-word tracking, and tactile haptic feedback.</p>
+      <a href="https://github.com/AFcoder10/Simple-Lyrics/releases/latest" class="btn-primary" target="_blank" rel="noopener noreferrer">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        Download Latest Release
+      </a>
+    </section>
+
+    <section class="features fade-up delay-2">
+      <h2>Flagship Features</h2>
+      <div class="feature-grid">
+        <div class="feature-item">
+          <h3>✨ Live Animated Artwork</h3>
+          <p>Immerse yourself with full-screen, high-definition 720p live background videos that seamlessly blend into the interface using advanced transparency shaders.</p>
+        </div>
+        <div class="feature-item">
+          <h3>🎤 Word-to-Word Animations</h3>
+          <p>Sing along perfectly. Our custom rendering engine flawlessly highlights lyrics word-by-word in real time, keeping you perfectly synced with the vocals.</p>
+        </div>
+        <div class="feature-item">
+          <h3>📳 Word-to-Word Haptics</h3>
+          <p>Don't just hear the music—feel it. Our deeply integrated haptics engine vibrates your device precisely on every syllable, creating an unmatched tactile experience.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="showcase fade-up delay-3">
+      <h2>A Glimpse Inside</h2>
+      <div class="grid">
+        <div class="glass-card">
+          <img src="assets/1.png" alt="App Screenshot 1">
+        </div>
+        <div class="glass-card">
+          <img src="assets/2.png" alt="App Screenshot 2">
+        </div>
+        <div class="glass-card">
+          <img src="assets/3.png" alt="App Screenshot 3">
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="links">
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="terms.html">Terms of Service</a>
+        <a href="https://github.com/AFcoder10/Simple-Lyrics" target="_blank" rel="noopener noreferrer">GitHub Source</a>
+      </div>
+      <p>&copy; 2026 Simple Lyrics. Open Source under MIT License.</p>
+    </footer>
+  </div>
+
+  <script>
+    // Minimal intersection observer for scroll animations
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.style.animationPlayState = 'running';
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.fade-up').forEach(el => {
+      el.style.animationPlayState = 'paused';
+      observer.observe(el);
+    });
+  </script>
+</body>
+</html>

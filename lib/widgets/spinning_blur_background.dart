@@ -95,6 +95,10 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
     final vibrant = await _createVibrantHighlightSafeImage(source);
     final double sigma = SettingsService().blurIntensity.value;
 
+    if (sigma <= 0.05) {
+      return vibrant;
+    }
+
     // --- Pass 1: heavy blur ---
     final r1 = ui.PictureRecorder();
     final c1 = Canvas(r1, rect);
@@ -226,8 +230,8 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
     try {
       final ui.Codec codec = await ui.instantiateImageCodec(
         widget.albumArtBytes!,
-        targetWidth: 512,
-        targetHeight: 512,
+        targetWidth: 128,
+        targetHeight: 128,
         allowUpscaling: false,
       );
       final ui.FrameInfo frameInfo = await codec.getNextFrame();

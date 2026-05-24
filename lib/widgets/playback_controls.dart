@@ -11,6 +11,9 @@ class PlaybackControls extends StatefulWidget {
   final VoidCallback onInteraction;
   final ValueChanged<Duration> onPositionPreview;
   final ValueChanged<bool> onPositionPreviewing;
+  final ValueNotifier<Duration> positionNotifier;
+
+  final bool transparentBackground;
 
   const PlaybackControls({
     super.key,
@@ -20,6 +23,8 @@ class PlaybackControls extends StatefulWidget {
     required this.onInteraction,
     required this.onPositionPreview,
     required this.onPositionPreviewing,
+    required this.positionNotifier,
+    this.transparentBackground = false,
   });
 
   @override
@@ -33,7 +38,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
   @override
   void initState() {
     super.initState();
-    _smoothPositionMs = widget.mediaState.position.inMilliseconds.toDouble();
+    _smoothPositionMs = widget.positionNotifier.value.inMilliseconds.toDouble();
   }
 
   @override
@@ -44,9 +49,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
         widget.mediaState.artist != oldWidget.mediaState.artist;
 
     if (songChanged) {
-      _smoothPositionMs = widget.mediaState.position.inMilliseconds.toDouble();
-    } else if (!_isDragging) {
-      _smoothPositionMs = widget.mediaState.position.inMilliseconds.toDouble();
+      _smoothPositionMs = widget.positionNotifier.value.inMilliseconds.toDouble();
     }
   }
 
@@ -58,6 +61,50 @@ class _PlaybackControlsState extends State<PlaybackControls> {
 
   @override
   Widget build(BuildContext context) {
+    Widget content = SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildSeekBar(context),
+            const SizedBox(height: 12),
+            _buildMainControlsRow(),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+
+    if (!widget.transparentBackground) {
+      content = ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.0),
+                  Colors.black.withValues(alpha: 0.45),
+                ],
+              ),
+            ),
+            child: content,
+          ),
+        ),
+      );
+    } else {
+      content = Container(
+        width: double.infinity,
+        color: Colors.transparent,
+        child: content,
+      );
+    }
+
     return Align(
       alignment: Alignment.bottomCenter,
       child: IgnorePointer(
@@ -66,39 +113,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
           opacity: widget.visible ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 350),
           curve: Curves.easeOut,
-          child: ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.0),
-                      Colors.black.withValues(alpha: 0.45),
-                    ],
-                  ),
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildSeekBar(context),
-                        const SizedBox(height: 12),
-                        _buildMainControlsRow(),
-                        const SizedBox(height: 12),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+          child: content,
         ),
       ),
     );
@@ -107,71 +122,77 @@ class _PlaybackControlsState extends State<PlaybackControls> {
   Widget _buildSeekBar(BuildContext context) {
     final durationMs = widget.mediaState.duration.inMilliseconds.toDouble();
     final maxVal = durationMs > 0 ? durationMs : 1.0;
-    final positionMs = _isDragging
-        ? _smoothPositionMs
-        : widget.mediaState.position.inMilliseconds.toDouble();
-    final currentVal = positionMs.clamp(0.0, maxVal);
 
-    return Column(
-      children: [
-        SliderTheme(
-          data: SliderThemeData(
-            trackHeight: 6,
-            trackShape: const RoundedRectSliderTrackShape(),
-            thumbShape: SliderComponentShape.noThumb,
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 0),
-            activeTrackColor: Colors.white,
-            inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
-          ),
-          child: Slider(
-            value: currentVal,
-            min: 0.0,
-            max: maxVal,
-            onChanged: (value) {
-              widget.onInteraction();
-              setState(() {
-                _isDragging = true;
-                _smoothPositionMs = value;
-              });
-              widget.onPositionPreviewing(true);
-              widget.onPositionPreview(Duration(milliseconds: value.toInt()));
-            },
-            onChangeEnd: (value) {
-              widget.onInteraction();
-              _isDragging = false;
-              widget.onPositionPreviewing(false);
-              widget.service.seekTo(Duration(milliseconds: value.toInt()));
-            },
-          ),
-        ),
-        const SizedBox(height: 6),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                _formatDuration(Duration(milliseconds: currentVal.toInt())),
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Display',
-                ),
+    return ValueListenableBuilder<Duration>(
+      valueListenable: widget.positionNotifier,
+      builder: (context, visualPosition, _) {
+        final positionMs = _isDragging
+            ? _smoothPositionMs
+            : visualPosition.inMilliseconds.toDouble();
+        final currentVal = positionMs.clamp(0.0, maxVal);
+
+        return Column(
+          children: [
+            SliderTheme(
+              data: SliderThemeData(
+                trackHeight: 6,
+                trackShape: const RoundedRectSliderTrackShape(),
+                thumbShape: SliderComponentShape.noThumb,
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 0),
+                activeTrackColor: Colors.white,
+                inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
               ),
-              Text(
-                _formatDuration(widget.mediaState.duration),
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Display',
-                ),
+              child: Slider(
+                value: currentVal,
+                min: 0.0,
+                max: maxVal,
+                onChanged: (value) {
+                  widget.onInteraction();
+                  setState(() {
+                    _isDragging = true;
+                    _smoothPositionMs = value;
+                  });
+                  widget.onPositionPreviewing(true);
+                  widget.onPositionPreview(Duration(milliseconds: value.toInt()));
+                },
+                onChangeEnd: (value) {
+                  widget.onInteraction();
+                  _isDragging = false;
+                  widget.onPositionPreviewing(false);
+                  widget.service.seekTo(Duration(milliseconds: value.toInt()));
+                },
               ),
-            ],
-          ),
-        ),
-      ],
+            ),
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _formatDuration(Duration(milliseconds: currentVal.toInt())),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      fontFamily: 'Display',
+                    ),
+                  ),
+                  Text(
+                    _formatDuration(widget.mediaState.duration),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      fontFamily: 'Display',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

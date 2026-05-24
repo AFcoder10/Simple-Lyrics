@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../models/media_state.dart';
 import '../screens/settings_screen.dart';
 import '../services/media_session_service.dart';
+import '../services/settings_service.dart';
 import 'full_screen_artwork.dart';
+import 'animated_artwork_player.dart';
 
 /// Header widget displaying album artwork, song title, and artist name.
 ///
@@ -46,7 +48,7 @@ class NowPlayingHeader extends StatelessWidget {
                     alignment: Alignment.centerLeft,
                     children: <Widget>[
                       ...previousChildren,
-                      if (currentChild != null) currentChild,
+                      ?currentChild,
                     ],
                   );
                 },
@@ -93,7 +95,7 @@ class NowPlayingHeader extends StatelessWidget {
             barrierColor: Colors.black.withValues(alpha: 0.8),
             transitionDuration: const Duration(milliseconds: 550),
             reverseTransitionDuration: const Duration(milliseconds: 450),
-            pageBuilder: (context, _, __) => FullScreenArtwork(
+            pageBuilder: (context, _, _) => FullScreenArtwork(
               artBytes: mediaState.albumArtBytes ?? mediaState.thumbnailArtBytes,
               title: mediaState.title,
               artist: mediaState.artist,
@@ -128,9 +130,9 @@ class NowPlayingHeader extends StatelessWidget {
                 child: AnimatedBuilder(
                   animation: animation,
                   builder: (context, _) {
-                    // Lerp radius between small (12) and large (28)
+                    // Lerp radius between small (8) and large (12)
                     final t = animation.value;
-                    final radius = 12.0 + (28.0 - 12.0) * t;
+                    final radius = 8.0 + (12.0 - 8.0) * t;
 
                     return Container(
                       decoration: BoxDecoration(
@@ -139,22 +141,49 @@ class NowPlayingHeader extends StatelessWidget {
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: SizedBox.expand(
-                        child: artBytes != null && artBytes.isNotEmpty
-                            ? Image.memory(
-                                artBytes,
-                                fit: BoxFit.cover,
-                                gaplessPlayback: true,
-                              )
-                            : Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [Colors.grey.shade800, Colors.grey.shade900],
-                                  ),
-                                ),
-                                child: const Icon(Icons.music_note_rounded, color: Colors.white38),
-                              ),
+                        child: ValueListenableBuilder<bool>(
+                          valueListenable: SettingsService().animatedArtworkEnabled,
+                          builder: (context, enabled, _) {
+                            final hasSquareUrl = mediaState.squareMasterUrl != null && mediaState.squareMasterUrl!.isNotEmpty;
+                            final isLiveActive = enabled && hasSquareUrl;
+
+                            final placeholder = artBytes != null && artBytes.isNotEmpty
+                                ? Image.memory(
+                                    artBytes,
+                                    key: const ValueKey('static_art'),
+                                    fit: BoxFit.cover,
+                                    gaplessPlayback: true,
+                                  )
+                                : Container(
+                                    key: const ValueKey('static_placeholder'),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [Colors.grey.shade800, Colors.grey.shade900],
+                                      ),
+                                    ),
+                                    child: const Icon(Icons.music_note_rounded, color: Colors.white38),
+                                  );
+
+                            return AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 600),
+                              switchInCurve: Curves.easeIn,
+                              switchOutCurve: Curves.easeOut,
+                              child: isLiveActive
+                                  ? AnimatedArtworkPlayer(
+                                      key: ValueKey('live_art_${mediaState.squareMasterUrl}'),
+                                      url: mediaState.squareMasterUrl!,
+                                      placeholder: placeholder,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : SizedBox.expand(
+                                      key: const ValueKey('static_art_wrapper'),
+                                      child: placeholder,
+                                    ),
+                            );
+                          },
+                        ),
                       ),
                     );
                   },
@@ -167,7 +196,7 @@ class NowPlayingHeader extends StatelessWidget {
           width: 68,
           height: 68,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.25),
@@ -177,25 +206,52 @@ class NowPlayingHeader extends StatelessWidget {
             ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: artBytes != null && artBytes.isNotEmpty
-              ? Image.memory(
-                  artBytes,
-                  fit: BoxFit.cover,
-                  cacheWidth: 300,
-                  cacheHeight: 300,
-                  filterQuality: FilterQuality.high,
-                  gaplessPlayback: true,
-                )
-              : Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Colors.grey.shade800, Colors.grey.shade900],
-                    ),
-                  ),
-                  child: const Icon(Icons.music_note_rounded, color: Colors.white38, size: 36),
-                ),
+          child: ValueListenableBuilder<bool>(
+            valueListenable: SettingsService().animatedArtworkEnabled,
+            builder: (context, enabled, _) {
+              final hasSquareUrl = mediaState.squareMasterUrl != null && mediaState.squareMasterUrl!.isNotEmpty;
+              final isLiveActive = enabled && hasSquareUrl;
+
+              final placeholder = artBytes != null && artBytes.isNotEmpty
+                  ? Image.memory(
+                      artBytes,
+                      key: const ValueKey('static_art'),
+                      fit: BoxFit.cover,
+                      cacheWidth: 300,
+                      cacheHeight: 300,
+                      filterQuality: FilterQuality.high,
+                      gaplessPlayback: true,
+                    )
+                  : Container(
+                      key: const ValueKey('static_placeholder'),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Colors.grey.shade800, Colors.grey.shade900],
+                        ),
+                      ),
+                      child: const Icon(Icons.music_note_rounded, color: Colors.white38, size: 36),
+                    );
+
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 600),
+                switchInCurve: Curves.easeIn,
+                switchOutCurve: Curves.easeOut,
+                child: isLiveActive
+                    ? AnimatedArtworkPlayer(
+                        key: ValueKey('live_art_${mediaState.squareMasterUrl}'),
+                        url: mediaState.squareMasterUrl!,
+                        placeholder: placeholder,
+                        fit: BoxFit.cover,
+                      )
+                    : SizedBox.expand(
+                        key: const ValueKey('static_art_wrapper'),
+                        child: placeholder,
+                      ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -215,7 +271,7 @@ class NowPlayingHeader extends StatelessWidget {
               fontFamily: 'Display',
               color: Colors.white,
               fontSize: 20,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               letterSpacing: -0.5,
               height: 1.1,
             ),
@@ -230,7 +286,7 @@ class NowPlayingHeader extends StatelessWidget {
               fontFamily: 'Display',
               color: Colors.white.withValues(alpha: 0.7),
               fontSize: 16,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w400,
               letterSpacing: -0.2,
             ),
           ),

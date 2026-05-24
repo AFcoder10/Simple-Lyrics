@@ -15,7 +15,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
         elevation: 0,
         title: const Text(
           'Background Style',
-          style: TextStyle(fontFamily: 'Display', fontSize: 20, color: Colors.white),
+          style: TextStyle(fontFamily: 'Display', fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 20),
@@ -42,7 +42,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
                       splashColor: Colors.transparent,
                     ),
                     child: DropdownButtonFormField<BackgroundStyle>(
-                      value: currentStyle,
+                      initialValue: currentStyle,
                       decoration: const InputDecoration(
                         contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                         border: InputBorder.none,
@@ -63,7 +63,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
                                   color: Colors.white,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
-                                  fontFamily: 'Display',
+                                  fontFamily: 'Inter',
                                 ),
                               ),
                             ],
@@ -107,7 +107,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
                                   label: 'Blur Intensity',
                                   icon: Icons.blur_linear_rounded,
                                   valueListenable: settings.blurIntensity,
-                                  min: 10.0,
+                                  min: 0.0,
                                   max: 80.0,
                                 ),
                                 const Divider(color: Colors.white10, height: 1),
@@ -121,7 +121,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
                                 const Divider(color: Colors.white10, height: 1),
                                 TextButton.icon(
                                   onPressed: () {
-                                    settings.blurIntensity.value = 40.0;
+                                    settings.blurIntensity.value = 10.0;
                                     settings.blurAnimationSpeed.value = 1.0;
                                   },
                                   icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white70),
@@ -290,7 +290,8 @@ class BackgroundSettingsScreen extends StatelessWidget {
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.4),
               fontSize: 12,
-              fontWeight: FontWeight.bold,
+              fontFamily: 'Display',
+              fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
             ),
           ),
@@ -317,6 +318,8 @@ class BackgroundSettingsScreen extends StatelessWidget {
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.4),
                 fontSize: 13,
+                fontFamily: 'Display',
+                fontWeight: FontWeight.w400,
                 height: 1.4,
               ),
             ),
@@ -351,7 +354,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
                       color: Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
-                      fontFamily: 'Display',
+                      fontFamily: 'Inter',
                     ),
                   ),
                 ],

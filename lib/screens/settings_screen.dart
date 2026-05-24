@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../services/media_session_service.dart';
 import 'settings_appearance.dart';
+import 'settings_lyrics.dart';
 import 'settings_immersive.dart';
 import 'settings_haptics.dart';
 import 'settings_storage.dart';
@@ -28,6 +29,7 @@ class SettingsScreen extends StatelessWidget {
               style: TextStyle(
                 fontFamily: 'Display',
                 fontSize: 22,
+                fontWeight: FontWeight(1000),
                 color: Colors.white,
               ),
             ),
@@ -46,9 +48,16 @@ class SettingsScreen extends StatelessWidget {
                 _buildMenuTile(
                   context,
                   title: 'Appearance',
-                  subtitle: 'Font size, romanization, and visuals',
+                  subtitle: 'Background style and visuals',
                   icon: Icons.palette_rounded,
                   page: const AppearanceSettingsScreen(),
+                ),
+                _buildMenuTile(
+                  context,
+                  title: 'Lyrics',
+                  subtitle: 'Font size, timing offset, and romanization',
+                  icon: Icons.library_music_rounded,
+                  page: const LyricsSettingsScreen(),
                 ),
                 _buildMenuTile(
                   context,
@@ -135,7 +144,8 @@ class SettingsScreen extends StatelessWidget {
           style: const TextStyle(
             color: Colors.white,
             fontSize: 17,
-            fontWeight: FontWeight.w600,
+            fontFamily: 'Display',
+            fontWeight: FontWeight(1000),
           ),
         ),
         subtitle: Padding(
@@ -145,6 +155,8 @@ class SettingsScreen extends StatelessWidget {
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.5),
               fontSize: 14,
+              fontFamily: 'Display',
+              fontWeight: FontWeight.w400,
             ),
           ),
         ),

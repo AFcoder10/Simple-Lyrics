@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../models/media_state.dart';
@@ -44,6 +43,8 @@ class MediaSessionService {
     required String artist,
     required Uint8List? artworkBytes,
     Uint8List? thumbnailBytes,
+    String? tallMasterUrl,
+    String? squareMasterUrl,
   }) {
     if (_currentState.title != title || _currentState.artist != artist) {
       return;
@@ -52,6 +53,8 @@ class MediaSessionService {
     _currentState = _currentState.copyWithArtwork(
       artworkBytes,
       thumbnailBytes: thumbnailBytes,
+      tallMasterUrl: tallMasterUrl,
+      squareMasterUrl: squareMasterUrl,
     );
     _stateController.add(_currentState);
   }
@@ -67,6 +70,8 @@ class MediaSessionService {
             previousThumbnail: _currentState.thumbnailArtBytes,
             previousTitle: _currentState.title,
             previousArtist: _currentState.artist,
+            previousTallMasterUrl: _currentState.tallMasterUrl,
+            previousSquareMasterUrl: _currentState.squareMasterUrl,
           );
         })
         .listen(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import 'services/media_session_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/permission_screen.dart';
@@ -7,8 +8,6 @@ import 'services/settings_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  await SettingsService().init();
 
   // Immersive edge-to-edge system UI
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -23,6 +22,8 @@ void main() async {
     ),
   );
 
+  // Load persisted settings before launching UI to avoid race conditions
+  await SettingsService().init();
   runApp(const SimpleLyricsApp());
 }
 
@@ -72,7 +73,7 @@ class _SimpleLyricsAppState extends State<SimpleLyricsApp> {
           onPrimary: Colors.black,
           onSurface: Colors.white,
         ),
-        fontFamily: 'Display',
+        fontFamily: 'Inter',
         useMaterial3: true,
       ),
       routes: {

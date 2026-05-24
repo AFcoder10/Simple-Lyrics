@@ -110,7 +110,6 @@ class _NoisePainter extends CustomPainter {
       ..color = Colors.white.withValues(alpha: 0.03)
       ..strokeWidth = 1.0;
 
-    final random = ui.Gradient.linear(Offset.zero, Offset(size.width, size.height), [Colors.transparent, Colors.transparent]); // Not using this for random
 
     // Draw sparse points to simulate grain
     // For performance, we use a fixed pattern or just a few points

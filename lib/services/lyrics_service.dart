@@ -100,6 +100,7 @@ class LyricsService {
       final bodyBytes = utf8.encode(jsonEncode({
         'song_name': query.songName,
         'artist_name': query.artistName,
+        'storefront': 'us',
       }));
 
       final request = await _client.postUrl(Uri.parse(_apiUrl));
@@ -112,7 +113,10 @@ class LyricsService {
       if (response.statusCode != 200) return null;
 
       final json = jsonDecode(body) as Map<String, dynamic>;
-      final data = json['data'] as List<dynamic>?;
+      final lyricsJson = json['lyrics'] as Map<String, dynamic>?;
+      if (lyricsJson == null) return null;
+
+      final data = lyricsJson['data'] as List<dynamic>?;
       if (data == null || data.isEmpty) return null;
 
       final firstResult = data[0] as Map<String, dynamic>;

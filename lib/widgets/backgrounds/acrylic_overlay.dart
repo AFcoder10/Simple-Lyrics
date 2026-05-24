@@ -23,9 +23,7 @@ class _StaticAcrylicOverlayState extends State<StaticAcrylicOverlay> {
   }
 
   Future<void> _initTextures() async {
-    if (_cachedFineGrain == null) {
-      _cachedFineGrain = await _generateFineGrain();
-    }
+    _cachedFineGrain ??= await _generateFineGrain();
     if (mounted) setState(() {});
   }
 

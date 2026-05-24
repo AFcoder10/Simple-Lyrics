@@ -170,6 +170,8 @@ class MediaNotificationListener : NotificationListenerService() {
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
             ?: ""
 
+        val album = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: ""
+
         val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
         var position = playbackState?.position ?: 0L
         val stateCode = playbackState?.state ?: lastReportedState
@@ -189,6 +191,7 @@ class MediaNotificationListener : NotificationListenerService() {
         val stateMap = mutableMapOf<String, Any?>(
             "title" to title,
             "artist" to artist,
+            "album" to album,
             "position" to position,
             "duration" to duration,
             "isPlaying" to isPlaying,

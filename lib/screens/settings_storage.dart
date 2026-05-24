@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../services/media_session_service.dart';
 import '../services/cache_service.dart';
 import '../models/media_state.dart';
@@ -18,7 +18,7 @@ class StorageCacheSettingsScreen extends StatelessWidget {
         elevation: 0,
         title: const Text(
           'Storage & Cache',
-          style: TextStyle(fontFamily: 'Display', fontSize: 20, color: Colors.white),
+          style: TextStyle(fontFamily: 'Display', fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 20),
@@ -30,7 +30,7 @@ class StorageCacheSettingsScreen extends StatelessWidget {
         children: [
           _buildActionTile(
             title: 'View Cache',
-            subtitle: 'Manage individual saved songs',
+            subtitle: 'Search, sort, and manage saved songs',
             icon: Icons.folder_open_rounded,
             onTap: () {
               Navigator.of(context).push(
@@ -41,6 +41,21 @@ class StorageCacheSettingsScreen extends StatelessWidget {
                   },
                   transitionDuration: const Duration(milliseconds: 300),
                 ),
+              );
+            },
+          ),
+          FutureBuilder<_CacheSummary>(
+            future: _loadCacheSummary(),
+            builder: (context, snapshot) {
+              final summary = snapshot.data;
+              return _buildActionTile(
+                title: 'Cache Summary',
+                subtitle: summary == null
+                    ? 'Calculating saved lyrics and artwork'
+                    : '${summary.count} songs / ${_formatBytes(summary.sizeBytes)}',
+                icon: Icons.bar_chart_rounded,
+                onTap: null,
+                enabled: false,
               );
             },
           ),
@@ -119,6 +134,21 @@ class StorageCacheSettingsScreen extends StatelessWidget {
     );
   }
 
+  Future<_CacheSummary> _loadCacheSummary() async {
+    await CacheService.syncIndexWithFiles();
+    final index = await CacheService.getIndex();
+    final sizeBytes = await CacheService.cacheSizeBytes();
+    return _CacheSummary(index.length, sizeBytes);
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    final kb = bytes / 1024;
+    if (kb < 1024) return '${kb.toStringAsFixed(1)} KB';
+    final mb = kb / 1024;
+    return '${mb.toStringAsFixed(1)} MB';
+  }
+
   Widget _buildActionTile({
     required String title,
     required String subtitle,
@@ -151,7 +181,8 @@ class StorageCacheSettingsScreen extends StatelessWidget {
           style: TextStyle(
             color: enabled ? Colors.white : Colors.white24,
             fontSize: 17,
-            fontWeight: FontWeight.w600,
+            fontFamily: 'Display',
+            fontWeight: FontWeight(1000),
           ),
         ),
         subtitle: Padding(
@@ -161,6 +192,8 @@ class StorageCacheSettingsScreen extends StatelessWidget {
             style: TextStyle(
               color: enabled ? Colors.white.withValues(alpha: 0.5) : Colors.white10,
               fontSize: 14,
+              fontFamily: 'Display',
+              fontWeight: FontWeight.w400,
             ),
           ),
         ),
@@ -168,4 +201,11 @@ class StorageCacheSettingsScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CacheSummary {
+  final int count;
+  final int sizeBytes;
+
+  const _CacheSummary(this.count, this.sizeBytes);
 }

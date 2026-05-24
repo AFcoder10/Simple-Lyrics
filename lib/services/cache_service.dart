@@ -18,6 +18,12 @@ class CacheService {
     try {
       final file = await _lyricsFile(key);
       if (!await file.exists()) return null;
+      // expire after 30 days
+      final modified = await file.lastModified();
+      if (DateTime.now().difference(modified) > const Duration(days: 30)) {
+        try { await file.delete(); } catch (_) {}
+        return null;
+      }
       return await file.readAsString();
     } catch (_) {
       return null;
@@ -30,7 +36,7 @@ class CacheService {
       await file.writeAsString(ttml, flush: true);
       
       if (title != null && artist != null) {
-        await _updateIndex(key, title, artist);
+        await _updateIndex(_lyricsDirName, key, title, artist);
       }
     } catch (_) {
       return;
@@ -39,20 +45,63 @@ class CacheService {
 
   static Future<Map<String, dynamic>> getIndex() async {
     try {
-      final file = await _indexFile();
-      if (!await file.exists()) return {};
-      final content = await file.readAsString();
-      return jsonDecode(content) as Map<String, dynamic>;
+      final base = await _baseDir();
+      final lyricsIndex = File('${base.path}/$_lyricsDirName/index.json');
+      final artworkIndex = File('${base.path}/$_artworkDirName/index.json');
+      final Map<String, dynamic> merged = {};
+      if (await lyricsIndex.exists()) {
+        final content = await lyricsIndex.readAsString();
+        merged.addAll(jsonDecode(content) as Map<String, dynamic>);
+      }
+      if (await artworkIndex.exists()) {
+        final content = await artworkIndex.readAsString();
+        final Map<String, dynamic> artIndex = jsonDecode(content) as Map<String, dynamic>;
+        artIndex.forEach((k, v) {
+          // prefer lyrics metadata if present
+          merged.putIfAbsent(k, () => v);
+        });
+      }
+      return merged;
     } catch (_) {
       return {};
     }
   }
 
-  static Future<void> _updateIndex(String key, String title, String artist) async {
-    final index = await getIndex();
+  static Future<int> cacheSizeBytes() async {
+    try {
+      final base = await _baseDir();
+      var total = 0;
+
+      Future<void> addDirectory(String dirName) async {
+        final dir = Directory('${base.path}/$dirName');
+        if (!await dir.exists()) return;
+        await for (final entity in dir.list(recursive: true, followLinks: false)) {
+          if (entity is File) {
+            try {
+              total += await entity.length();
+            } catch (_) {}
+          }
+        }
+      }
+
+      await addDirectory(_lyricsDirName);
+      await addDirectory(_artworkDirName);
+      return total;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  static Future<void> _updateIndex(String dirName, String key, String title, String artist) async {
+    final base = await _baseDir();
+    final indexFile = File('${base.path}/$dirName/index.json');
+    final Map<String, dynamic> index = await (indexFile.exists().then((exists) async {
+      if (!exists) return <String, dynamic>{};
+      final c = await indexFile.readAsString();
+      return jsonDecode(c) as Map<String, dynamic>;
+    }));
     index[key] = {'title': title, 'artist': artist, 'timestamp': DateTime.now().millisecondsSinceEpoch};
-    final file = await _indexFile();
-    await file.writeAsString(jsonEncode(index), flush: true);
+    await indexFile.writeAsString(jsonEncode(index), flush: true);
   }
 
   static Future<File> _indexFile() async {
@@ -65,17 +114,52 @@ class CacheService {
       final dir = await _ensureDir(_artworkDirName);
       final largeFile = File('${dir.path}/${key}_l.jpg');
       final smallFile = File('${dir.path}/${key}_s.jpg');
+      final metaFile = File('${dir.path}/${key}_meta.json');
 
       final hasLarge = await largeFile.exists();
       final hasSmall = await smallFile.exists();
-      if (!hasLarge && !hasSmall) return null;
+      
+      final largeBytes = await (hasLarge && await largeFile.exists() ? largeFile.readAsBytes() : null);
+      final smallBytes = await (hasSmall && await smallFile.exists() ? smallFile.readAsBytes() : null);
 
-      final largeBytes = hasLarge ? await largeFile.readAsBytes() : null;
-      final smallBytes = hasSmall ? await smallFile.readAsBytes() : null;
+      // expire after 30 days if files exist
+      if (hasLarge) {
+        final m = await largeFile.lastModified();
+        if (DateTime.now().difference(m) > const Duration(days: 30)) {
+          try { await largeFile.delete(); } catch (_) {}
+        }
+      }
+      if (hasSmall) {
+        final m = await smallFile.lastModified();
+        if (DateTime.now().difference(m) > const Duration(days: 30)) {
+          try { await smallFile.delete(); } catch (_) {}
+        }
+      }
+
+      String? tallMasterUrl;
+      String? squareMasterUrl;
+      String? staticArtworkUrl;
+      if (await metaFile.exists()) {
+        try {
+          final content = await metaFile.readAsString();
+          final metaData = jsonDecode(content) as Map<String, dynamic>;
+          tallMasterUrl = metaData['tall_master_url'] as String?;
+          squareMasterUrl = metaData['square_master_url'] as String?;
+          staticArtworkUrl = metaData['static_artwork_url'] as String?;
+        } catch (_) {}
+      }
+
+      // If we have at least the meta file or image files, return the cached artwork container.
+      if (!hasLarge && !hasSmall && tallMasterUrl == null && squareMasterUrl == null && staticArtworkUrl == null) {
+        return null;
+      }
 
       return CachedArtworkBytes(
         largeBytes: largeBytes ?? smallBytes,
         smallBytes: smallBytes ?? largeBytes,
+        tallMasterUrl: tallMasterUrl,
+        squareMasterUrl: squareMasterUrl,
+        staticArtworkUrl: staticArtworkUrl,
       );
     } catch (_) {
       return null;
@@ -86,8 +170,12 @@ class CacheService {
     String key, {
     Uint8List? largeBytes,
     Uint8List? smallBytes,
+    String? tallMasterUrl,
+    String? squareMasterUrl,
+    String? staticArtworkUrl,
+    String? title,
+    String? artist,
   }) async {
-    if (largeBytes == null && smallBytes == null) return;
     try {
       final dir = await _ensureDir(_artworkDirName);
       if (largeBytes != null) {
@@ -98,9 +186,54 @@ class CacheService {
         final smallFile = File('${dir.path}/${key}_s.jpg');
         await smallFile.writeAsBytes(smallBytes, flush: true);
       }
+      
+      final metaFile = File('${dir.path}/${key}_meta.json');
+      Map<String, dynamic> metaData = {};
+      if (await metaFile.exists()) {
+        try {
+          final content = await metaFile.readAsString();
+          metaData = jsonDecode(content) as Map<String, dynamic>;
+        } catch (_) {}
+      }
+      
+      if (tallMasterUrl != null) metaData['tall_master_url'] = tallMasterUrl;
+      if (squareMasterUrl != null) metaData['square_master_url'] = squareMasterUrl;
+      if (staticArtworkUrl != null) metaData['static_artwork_url'] = staticArtworkUrl;
+      
+      if (metaData.isNotEmpty) {
+        await metaFile.writeAsString(jsonEncode(metaData), flush: true);
+      }
+      if (title != null && artist != null) {
+        await _updateIndex(_artworkDirName, key, title, artist);
+      }
     } catch (_) {
       return;
     }
+  }
+
+  static Future<void> writeArtworkLinks(
+    String key, {
+    String? staticArtworkUrl,
+    String? tallMasterUrl,
+    String? squareMasterUrl,
+  }) async {
+    try {
+      final dir = await _ensureDir(_artworkDirName);
+      final metaFile = File('${dir.path}/${key}_meta.json');
+      Map<String, dynamic> metaData = {};
+      if (await metaFile.exists()) {
+        try {
+          final content = await metaFile.readAsString();
+          metaData = jsonDecode(content) as Map<String, dynamic>;
+        } catch (_) {}
+      }
+      
+      if (staticArtworkUrl != null) metaData['static_artwork_url'] = staticArtworkUrl;
+      if (tallMasterUrl != null) metaData['tall_master_url'] = tallMasterUrl;
+      if (squareMasterUrl != null) metaData['square_master_url'] = squareMasterUrl;
+      
+      await metaFile.writeAsString(jsonEncode(metaData), flush: true);
+    } catch (_) {}
   }
 
   static Future<void> clearAll() async {
@@ -128,15 +261,30 @@ class CacheService {
       final dir = await _ensureDir(_artworkDirName);
       final largeFile = File('${dir.path}/${key}_l.jpg');
       final smallFile = File('${dir.path}/${key}_s.jpg');
+      final metaFile = File('${dir.path}/${key}_meta.json');
       if (await largeFile.exists()) await largeFile.delete();
       if (await smallFile.exists()) await smallFile.delete();
+      if (await metaFile.exists()) await metaFile.delete();
 
       // Update index
-      final index = await getIndex();
-      if (index.containsKey(key)) {
-        index.remove(key);
-        final iFile = await _indexFile();
-        await iFile.writeAsString(jsonEncode(index), flush: true);
+      final base = await _baseDir();
+      final lyricsIndex = File('${base.path}/$_lyricsDirName/index.json');
+      if (await lyricsIndex.exists()) {
+        final content = await lyricsIndex.readAsString();
+        final Map<String, dynamic> idx = jsonDecode(content) as Map<String, dynamic>;
+        if (idx.containsKey(key)) {
+          idx.remove(key);
+          await lyricsIndex.writeAsString(jsonEncode(idx), flush: true);
+        }
+      }
+      final artworkIndex = File('${base.path}/$_artworkDirName/index.json');
+      if (await artworkIndex.exists()) {
+        final content = await artworkIndex.readAsString();
+        final Map<String, dynamic> idx = jsonDecode(content) as Map<String, dynamic>;
+        if (idx.containsKey(key)) {
+          idx.remove(key);
+          await artworkIndex.writeAsString(jsonEncode(idx), flush: true);
+        }
       }
     } catch (_) {}
   }
@@ -156,7 +304,8 @@ class CacheService {
   }
 
   static Future<Directory> _baseDir() async {
-    return getTemporaryDirectory();
+    // Use application support directory so cache persists longer
+    return getApplicationSupportDirectory();
   }
 
   static String _normalizeKey(String value) {
@@ -182,40 +331,65 @@ class CacheService {
 
   static Future<void> syncIndexWithFiles() async {
     try {
-      final index = await getIndex();
       final base = await _baseDir();
+      // Sync lyrics index
       final lyricsDir = Directory('${base.path}/$_lyricsDirName');
-      if (!await lyricsDir.exists()) return;
-
-      final files = await lyricsDir.list().toList();
-      bool changed = false;
-
-      for (final entity in files) {
-        if (entity is File && entity.path.endsWith('.ttml')) {
-          final fileName = entity.path.split('/').last.split('\\').last;
-          final key = fileName.replaceAll('.ttml', '');
-          
-          if (!index.containsKey(key)) {
-            // Try to recover metadata from file content
-            final content = await entity.readAsString();
-            final titleMatch = RegExp(r'<title>(.*?)<\/title>').firstMatch(content);
-            final artistMatch = RegExp(r'<artist>(.*?)<\/artist>').firstMatch(content);
-            
-            if (titleMatch != null && artistMatch != null) {
-              index[key] = {
-                'title': titleMatch.group(1),
-                'artist': artistMatch.group(1),
-                'timestamp': entity.lastModifiedSync().millisecondsSinceEpoch,
-              };
-              changed = true;
+      final lyricsIndexFile = File('${lyricsDir.path}/index.json');
+      if (await lyricsDir.exists()) {
+        final files = await lyricsDir.list().toList();
+        final Map<String, dynamic> idx = (await (lyricsIndexFile.exists().then((exists) async {
+          if (!exists) return <String, dynamic>{};
+          final c = await lyricsIndexFile.readAsString();
+          return jsonDecode(c) as Map<String, dynamic>;
+        })));
+        bool changed = false;
+        for (final entity in files) {
+          if (entity is File && entity.path.endsWith('.ttml')) {
+            final fileName = entity.path.split('/').last.split('\\').last;
+            final key = fileName.replaceAll('.ttml', '');
+            if (!idx.containsKey(key)) {
+              final content = await entity.readAsString();
+              final titleMatch = RegExp(r'<title>(.*?)<\/title>').firstMatch(content);
+              final artistMatch = RegExp(r'<artist>(.*?)<\/artist>').firstMatch(content);
+              if (titleMatch != null && artistMatch != null) {
+                idx[key] = {
+                  'title': titleMatch.group(1),
+                  'artist': artistMatch.group(1),
+                  'timestamp': entity.lastModifiedSync().millisecondsSinceEpoch,
+                };
+                changed = true;
+              }
             }
           }
         }
+        if (changed) await lyricsIndexFile.writeAsString(jsonEncode(idx), flush: true);
       }
 
-      if (changed) {
-        final iFile = await _indexFile();
-        await iFile.writeAsString(jsonEncode(index), flush: true);
+      // Sync artwork index: ensure files referenced exist
+      final artworkDir = Directory('${base.path}/$_artworkDirName');
+      final artworkIndexFile = File('${artworkDir.path}/index.json');
+      if (await artworkDir.exists()) {
+        final Map<String, dynamic> idx = (await (artworkIndexFile.exists().then((exists) async {
+          if (!exists) return <String, dynamic>{};
+          final c = await artworkIndexFile.readAsString();
+          return jsonDecode(c) as Map<String, dynamic>;
+        })));
+        bool changed = false;
+        final files = await artworkDir.list().toList();
+        final Set<String> presentKeys = {};
+        for (final entity in files) {
+          if (entity is File) {
+            final name = entity.path.split('/').last.split('\\').last;
+            final m = RegExp(r'^([0-9a-f]+)_[ls]\.jpg$').firstMatch(name);
+            if (m != null) presentKeys.add(m.group(1)!);
+          }
+        }
+        final remove = <String>[];
+        idx.forEach((k, v) {
+          if (!presentKeys.contains(k)) remove.add(k);
+        });
+        for (final k in remove) { idx.remove(k); changed = true; }
+        if (changed) await artworkIndexFile.writeAsString(jsonEncode(idx), flush: true);
       }
     } catch (_) {}
   }
@@ -224,9 +398,15 @@ class CacheService {
 class CachedArtworkBytes {
   final Uint8List? largeBytes;
   final Uint8List? smallBytes;
+  final String? tallMasterUrl;
+  final String? squareMasterUrl;
+  final String? staticArtworkUrl;
 
   const CachedArtworkBytes({
     required this.largeBytes,
     required this.smallBytes,
+    this.tallMasterUrl,
+    this.squareMasterUrl,
+    this.staticArtworkUrl,
   });
 }

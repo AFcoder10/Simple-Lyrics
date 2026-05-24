@@ -16,7 +16,7 @@ import '../services/settings_service.dart';
 class LyricsView extends StatefulWidget {
   final String trackKey;
   final LyricsData? lyricsData;
-  final Duration position;
+  final ValueNotifier<Duration> positionNotifier;
   final Duration duration;
   final bool isLoading;
   final String? errorMessage;
@@ -27,7 +27,7 @@ class LyricsView extends StatefulWidget {
     super.key,
     required this.trackKey,
     this.lyricsData,
-    required this.position,
+    required this.positionNotifier,
     required this.duration,
     required this.service,
     required this.onLyricsInteraction,
@@ -81,7 +81,8 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
   @override
   void initState() {
     super.initState();
-    _smoothSeconds.value = widget.position.inMilliseconds / 1000.0;
+    widget.positionNotifier.addListener(_onPositionChanged);
+    _applyPosition(widget.positionNotifier.value, widget.duration);
     
     SemanticsBinding.instance.ensureSemantics();
 
@@ -132,6 +133,10 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
   @override
   void didUpdateWidget(LyricsView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.positionNotifier != oldWidget.positionNotifier) {
+      oldWidget.positionNotifier.removeListener(_onPositionChanged);
+      widget.positionNotifier.addListener(_onPositionChanged);
+    }
     
     final trackChanged = widget.trackKey != oldWidget.trackKey;
     final lyricsChanged = widget.lyricsData != oldWidget.lyricsData;
@@ -142,7 +147,7 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
         _activeIndices = [];
         _focusIndex = -1;
         _focusDisplayIndex = -1;
-        _smoothSeconds.value = widget.position.inMilliseconds / 1000.0;
+        _smoothSeconds.value = widget.positionNotifier.value.inMilliseconds / 1000.0;
         _firstScroll = true;
         _startupSettling = true;
         _isAutoLocked = true;
@@ -176,11 +181,14 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
 
     if (_waitingForNewTrackLyrics) return;
 
-    if (widget.position != oldWidget.position ||
-        widget.duration != oldWidget.duration ||
-        trackChanged) {
-      _applyPosition(widget.position, widget.duration);
+    if (widget.duration != oldWidget.duration || trackChanged) {
+      _applyPosition(widget.positionNotifier.value, widget.duration);
     }
+  }
+
+  void _onPositionChanged() {
+    if (_waitingForNewTrackLyrics) return;
+    _applyPosition(widget.positionNotifier.value, widget.duration);
   }
 
   void _queueStartupFocusJump() {
@@ -208,6 +216,7 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
 
   @override
   void dispose() {
+    widget.positionNotifier.removeListener(_onPositionChanged);
     _ticker.dispose();
     _gyroSubscription?.cancel();
     _smoothSeconds.dispose();
@@ -391,7 +400,7 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
     if (widget.lyricsData == null) return;
     
     widget.onLyricsInteraction();
-    final currentPos = widget.position;
+    final currentPos = widget.positionNotifier.value;
     final newPos = Duration(seconds: (currentPos.inSeconds + seconds).clamp(0, widget.duration.inSeconds));
     
     widget.service.seekTo(newPos);
@@ -570,16 +579,31 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.only(left: 28.0, right: 28.0, top: 140.0, bottom: 20.0),
-                      child: material.Text(
-                        'Written by: ${data.songwriters.join(', ')}',
-                        style: TextStyle(
-                          fontFamily: 'Display',
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.1,
-                        ),
+                      child: RichText(
                         textAlign: TextAlign.left,
+                        text: TextSpan(
+                          style: TextStyle(
+                            fontFamily: 'Display',
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: 18,
+                          ),
+                          children: [
+                            const TextSpan(
+                              text: 'Written by: ',
+                              style: TextStyle(
+                                fontFamily: 'Heavy',
+                                fontWeight: FontWeight(1000),
+                                letterSpacing: 0.1,
+                              ),
+                            ),
+                            TextSpan(
+                              text: data.songwriters.join(', '),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -736,16 +760,32 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.only(left: 28.0, right: 28.0, bottom: 60.0),
-                    child: material.Text(
-                      'WRITTEN BY: ${data.songwriters.join(', ').toUpperCase()}',
-                      style: TextStyle(
-                        fontFamily: 'Display',
-                        color: Colors.white.withValues(alpha: 0.35),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
-                      ),
+                    child: RichText(
                       textAlign: TextAlign.left,
+                      text: TextSpan(
+                        style: TextStyle(
+                          fontFamily: 'Display',
+                          color: Colors.white.withValues(alpha: 0.35),
+                          fontSize: 15,
+                        ),
+                        children: [
+                          const TextSpan(
+                            text: 'WRITTEN BY: ',
+                            style: TextStyle(
+                              fontFamily: 'Heavy',
+                              fontWeight: FontWeight(1000),
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          TextSpan(
+                            text: data.songwriters.join(', ').toUpperCase(),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -973,7 +1013,7 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
                   elapsedSeconds: lineSeconds - word.startTime,
                   wordDuration: dur,
                   style: TextStyle(
-                    fontFamily: 'Display',
+                    fontFamily: 'Heavy',
                     fontSize: effectiveFontSize,
                     fontWeight: FontWeight(1000),
                     letterSpacing: -0.6,
@@ -1036,7 +1076,7 @@ class _StaticLine extends StatelessWidget {
                   ? TextAlign.right
                   : TextAlign.left,
               style: TextStyle(
-                fontFamily: 'Display',
+                fontFamily: 'Heavy',
                 fontSize: effectiveFontSize,
                 fontWeight: FontWeight(1000),
                 letterSpacing: -0.6,

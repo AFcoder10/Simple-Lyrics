@@ -4,8 +4,11 @@ import 'dart:typed_data';
 class MediaState {
   final String title;
   final String artist;
+  final String? album;
   final Uint8List? albumArtBytes;
   final Uint8List? thumbnailArtBytes;
+  final String? tallMasterUrl;
+  final String? squareMasterUrl;
   final Duration position;
   final Duration duration;
   final bool isPlaying;
@@ -18,8 +21,11 @@ class MediaState {
   const MediaState({
     required this.title,
     required this.artist,
+    this.album,
     this.albumArtBytes,
     this.thumbnailArtBytes,
+    this.tallMasterUrl,
+    this.squareMasterUrl,
     required this.position,
     required this.duration,
     required this.isPlaying,
@@ -34,6 +40,9 @@ class MediaState {
     return MediaState(
       title: 'No media playing',
       artist: '',
+      album: null,
+      tallMasterUrl: null,
+      squareMasterUrl: null,
       position: Duration.zero,
       duration: Duration.zero,
       isPlaying: false,
@@ -51,9 +60,12 @@ class MediaState {
     Uint8List? previousThumbnail,
     String? previousTitle,
     String? previousArtist,
+    String? previousTallMasterUrl,
+    String? previousSquareMasterUrl,
   }) {
     final title = map['title'] as String? ?? 'Unknown Title';
     final artist = map['artist'] as String? ?? 'Unknown Artist';
+    final album = map['album'] as String?;
     final isSameSong = title == previousTitle && artist == previousArtist;
 
     // Ignore incoming art completely to enforce iTunes-only artwork.
@@ -62,8 +74,11 @@ class MediaState {
     return MediaState(
       title: title,
       artist: artist,
+      album: album,
       albumArtBytes: isSameSong ? previousArtwork : null,
       thumbnailArtBytes: isSameSong ? previousThumbnail : null,
+      tallMasterUrl: isSameSong ? previousTallMasterUrl : null,
+      squareMasterUrl: isSameSong ? previousSquareMasterUrl : null,
       position: Duration(milliseconds: (map['position'] as int?) ?? 0),
       duration: Duration(milliseconds: (map['duration'] as int?) ?? 0),
       isPlaying: map['isPlaying'] as bool? ?? false,
@@ -78,8 +93,11 @@ class MediaState {
   MediaState copyWith({
     String? title,
     String? artist,
+    String? album,
     Uint8List? albumArtBytes,
     Uint8List? thumbnailArtBytes,
+    String? tallMasterUrl,
+    String? squareMasterUrl,
     Duration? position,
     Duration? duration,
     bool? isPlaying,
@@ -92,8 +110,11 @@ class MediaState {
     return MediaState(
       title: title ?? this.title,
       artist: artist ?? this.artist,
+      album: album ?? this.album,
       albumArtBytes: albumArtBytes ?? this.albumArtBytes,
       thumbnailArtBytes: thumbnailArtBytes ?? this.thumbnailArtBytes,
+      tallMasterUrl: tallMasterUrl ?? this.tallMasterUrl,
+      squareMasterUrl: squareMasterUrl ?? this.squareMasterUrl,
       position: position ?? this.position,
       duration: duration ?? this.duration,
       isPlaying: isPlaying ?? this.isPlaying,
@@ -108,12 +129,17 @@ class MediaState {
   MediaState copyWithArtwork(
     Uint8List? artworkBytes, {
     Uint8List? thumbnailBytes,
+    String? tallMasterUrl,
+    String? squareMasterUrl,
   }) {
     return MediaState(
       title: title,
       artist: artist,
+      album: album,
       albumArtBytes: artworkBytes,
       thumbnailArtBytes: thumbnailBytes ?? artworkBytes,
+      tallMasterUrl: tallMasterUrl ?? this.tallMasterUrl,
+      squareMasterUrl: squareMasterUrl ?? this.squareMasterUrl,
       position: position,
       duration: duration,
       isPlaying: isPlaying,
@@ -128,7 +154,7 @@ class MediaState {
   bool get isEmpty => title == 'No media playing' && artist.isEmpty;
 
   @override
-  String toString() => 'MediaState(title: $title, artist: $artist, '
+  String toString() => 'MediaState(title: $title, artist: $artist, album: $album, '
       'position: $position, duration: $duration, isPlaying: $isPlaying, '
       'shuffleMode: $shuffleMode, repeatMode: $repeatMode)';
 }

@@ -39,27 +39,107 @@ class _MeshGradientBackgroundState extends State<MeshGradientBackground>
     if (widget.albumArtBytes == null || widget.albumArtBytes!.isEmpty) return;
 
     try {
-      final imageProvider = MemoryImage(widget.albumArtBytes!);
+      final imageProvider = ResizeImage(
+        MemoryImage(widget.albumArtBytes!),
+        width: 64,
+        height: 64,
+      );
       final palette = await PaletteGenerator.fromImageProvider(
         imageProvider,
         maximumColorCount: 16,
       );
 
-      final List<Color> extracted = [];
-      if (palette.vibrantColor != null) extracted.add(palette.vibrantColor!.color);
-      if (palette.lightVibrantColor != null) extracted.add(palette.lightVibrantColor!.color);
-      if (palette.darkVibrantColor != null) extracted.add(palette.darkVibrantColor!.color);
-      if (palette.mutedColor != null) extracted.add(palette.mutedColor!.color);
+      final dominantColor = palette.dominantColor?.color ?? const Color(0xFF0A0A0A);
+      final dominantHsl = HSLColor.fromColor(dominantColor);
+      
+      final totalPopulation = palette.paletteColors.fold<int>(0, (sum, c) => sum + c.population);
 
-      // Fill up to 4 colors if needed
-      if (extracted.isEmpty) {
-        extracted.add(palette.dominantColor?.color ?? const Color(0xFF0A0A0A));
+      // Calculate max palette saturation for colors representing at least 2% of total pixels to filter compression noise
+      double maxPaletteSaturation = 0.0;
+      if (totalPopulation > 0) {
+        for (final pc in palette.paletteColors) {
+          if (pc.population >= totalPopulation * 0.02) {
+            final sat = HSLColor.fromColor(pc.color).saturation;
+            if (sat > maxPaletteSaturation) {
+              maxPaletteSaturation = sat;
+            }
+          }
+        }
+      }
+
+      // If the dominant color is grayscale (extremely low saturation) AND the maximum saturation among all major colors
+      // is extremely low (less than 12%), the entire artwork is overwhelmingly black/white/gray. Keep background neutral.
+      // FIXED: replaced || with && so that album covers with dark backgrounds and colorful accents are parsed as colorful.
+      final bool isArtworkGrayscale = dominantHsl.saturation < 0.08 && maxPaletteSaturation < 0.12;
+
+      final List<Color> extracted = [];
+      if (isArtworkGrayscale) {
+        extracted.add(dominantColor);
+      } else {
+        // Collect all distinct colorful swatches
+        final List<PaletteColor> candidates = [];
+        
+        void addCandidate(PaletteColor? pc) {
+          if (pc == null) return;
+          final isAlreadyAdded = candidates.any((c) => c.color == pc.color);
+          if (isAlreadyAdded) return;
+          
+          final matched = palette.paletteColors.firstWhere(
+            (c) => c.color == pc.color,
+            orElse: () => pc,
+          );
+          
+          final sat = HSLColor.fromColor(pc.color).saturation;
+          // Lowered minimum population threshold to 1.5% to capture small beautiful colorful accents/details
+          if (matched.population >= totalPopulation * 0.015 && sat >= 0.12) {
+            candidates.add(matched);
+          }
+        }
+
+        // Query swatches in preference order
+        addCandidate(palette.vibrantColor);
+        addCandidate(palette.darkVibrantColor);
+        addCandidate(palette.lightVibrantColor);
+        addCandidate(palette.mutedColor);
+        addCandidate(palette.darkMutedColor);
+        addCandidate(palette.lightMutedColor);
+
+        // Scan other raw palette colors for highly populated accents
+        for (final pc in palette.paletteColors) {
+          final sat = HSLColor.fromColor(pc.color).saturation;
+          if (pc.population >= totalPopulation * 0.02 && sat >= 0.15) {
+            if (!candidates.any((c) => c.color == pc.color)) {
+              candidates.add(pc);
+            }
+          }
+        }
+
+        // Sort candidates by population descending so the most prominent colors are used
+        candidates.sort((a, b) => b.population.compareTo(a.population));
+
+        for (final pc in candidates) {
+          extracted.add(pc.color);
+        }
+
+        // Fallback to dominant color
+        if (extracted.isEmpty) {
+          extracted.add(dominantColor);
+        }
       }
       
-      // Normalize colors to be dark enough
+      // Normalize colors to be dark enough but still vibrant/glowing
       final List<Color> normalized = extracted.map((c) {
         final hsl = HSLColor.fromColor(c);
-        return hsl.withLightness(hsl.lightness.clamp(0.05, 0.15)).toColor();
+        if (isArtworkGrayscale) {
+          return hsl.withSaturation(0.0).withLightness(hsl.lightness.clamp(0.04, 0.08)).toColor();
+        } else {
+          // Saturation protection: if saturation is low (below 0.15), it is mostly a neutral color.
+          // Scale down saturation to prevent noise leak.
+          final double satFactor = (hsl.saturation / 0.15).clamp(0.0, 1.0);
+          final double finalSaturation = hsl.saturation * satFactor;
+          // Clamp lightness to 0.18 to 0.32 so blobs are beautiful glowing accents
+          return hsl.withSaturation(finalSaturation).withLightness(hsl.lightness.clamp(0.18, 0.32)).toColor();
+        }
       }).toList();
 
       if (mounted) {
@@ -103,8 +183,6 @@ class _MeshPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
-    
     // Fill background
     canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF0A0A0A));
 

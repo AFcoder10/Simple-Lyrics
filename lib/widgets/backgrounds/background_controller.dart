@@ -7,10 +7,12 @@ import 'acrylic_overlay.dart';
 
 class BackgroundController extends StatelessWidget {
   final Uint8List? albumArtBytes;
+  final bool forceStatic;
 
   const BackgroundController({
     super.key,
     required this.albumArtBytes,
+    this.forceStatic = false,
   });
 
   @override
@@ -18,6 +20,13 @@ class BackgroundController extends StatelessWidget {
     return ValueListenableBuilder<BackgroundStyle>(
       valueListenable: SettingsService().backgroundStyle,
       builder: (context, style, _) {
+        if (forceStatic) {
+          return StaticColorBackground(
+            albumArtBytes: albumArtBytes,
+            forceStatic: true,
+          );
+        }
+
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 800),
           switchInCurve: Curves.easeInOutCubic,

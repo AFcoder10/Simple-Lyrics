@@ -709,6 +709,7 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                                             line: line,
                                             smoothSeconds: _smoothSeconds,
                                             romanize: romanize,
+                                            blurSigma: clampedBlur,
                                           );
                                         } else {
                                           return RepaintBoundary(
@@ -717,22 +718,14 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                                                   line: line, 
                                                   smoothSeconds: _smoothSeconds,
                                                   romanize: romanize,
+                                                  blurSigma: clampedBlur,
                                                 )
-                                              : _StaticLine(line: line, text: effectiveText),
+                                              : _StaticLine(line: line, text: effectiveText, blurSigma: clampedBlur),
                                           );
                                         }
                                       },
                                     );
 
-                                    if (clampedBlur > 0.1) {
-                                      return ImageFiltered(
-                                        imageFilter: ui.ImageFilter.blur(
-                                          sigmaX: clampedBlur,
-                                          sigmaY: clampedBlur,
-                                        ),
-                                        child: innerLine,
-                                      );
-                                    }
                                     return innerLine;
                                   }),
                                 ),
@@ -853,11 +846,13 @@ class _ActiveWordLine extends StatefulWidget {
   final LyricsLine line;
   final ValueNotifier<double> smoothSeconds;
   final bool romanize;
+  final double blurSigma;
 
   const _ActiveWordLine({
     required this.line,
     required this.smoothSeconds,
-    this.romanize = false,
+    required this.romanize,
+    this.blurSigma = 0.0,
   });
 
   @override
@@ -977,6 +972,7 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
                   longHold: isLongHold,
                   elapsedSeconds: lineSeconds - word.startTime,
                   wordDuration: dur,
+                  blurSigma: widget.blurSigma,
                   style: TextStyle(
                     fontFamily: hasComplexScript(word.text) ? 'Roboto' : 'Heavy',
                     fontFamilyFallback: hasComplexScript(word.text) ? null : kGlobalFontFallbacks,
@@ -1011,10 +1007,12 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
 class _StaticLine extends StatelessWidget {
   final LyricsLine line;
   final String? text;
+  final double blurSigma;
 
   const _StaticLine({
     required this.line,
     this.text,
+    this.blurSigma = 0.0,
   });
 
   @override
@@ -1048,6 +1046,12 @@ class _StaticLine extends StatelessWidget {
                 fontWeight: FontWeight(1000),
                 letterSpacing: -0.6,
                 color: Colors.white,
+              ).copyWith(
+                foreground: blurSigma > 0.1 
+                    ? (Paint()
+                        ..color = Colors.white
+                        ..maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma)) 
+                    : null,
               ),
             ),
           ),

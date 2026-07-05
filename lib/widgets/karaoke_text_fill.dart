@@ -15,6 +15,7 @@ class KaraokeTextFill extends StatelessWidget {
   final bool longHold;
   final double elapsedSeconds;
   final double wordDuration;
+  final double blurSigma;
 
   const KaraokeTextFill({
     super.key,
@@ -26,15 +27,26 @@ class KaraokeTextFill extends StatelessWidget {
     this.longHold = false,
     this.elapsedSeconds = 0,
     this.wordDuration = 0,
+    this.blurSigma = 0.0,
   });
 
   @override
   Widget build(BuildContext context) {
     final trail = progress.clamp(0.0, 1.0);
-    final activeStyle = style.copyWith(color: activeColor);
+    
+    // Apply blur directly to text rendering using MaskFilter
+    final Paint? blurPaint = blurSigma > 0.1 
+        ? (Paint()..maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma))
+        : null;
+
+    final activeStyle = style.copyWith(
+      color: activeColor,
+      foreground: blurPaint != null ? (Paint()..color = activeColor..maskFilter = blurPaint.maskFilter!) : null,
+    );
+    
     final dimStyle = style.copyWith(
       color: dimColor,
-      foreground: null,
+      foreground: blurPaint != null ? (Paint()..color = dimColor..maskFilter = blurPaint.maskFilter!) : null,
       background: null,
       shadows: null,
     );

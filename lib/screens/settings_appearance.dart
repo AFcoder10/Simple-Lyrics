@@ -1,3 +1,4 @@
+import 'package:simple_lyrics/core/font_fallbacks.dart';
 import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
 import 'settings_background.dart';
@@ -16,7 +17,7 @@ class AppearanceSettingsScreen extends StatelessWidget {
         title: const Text(
           'Appearance',
           style: TextStyle(
-            fontFamily: 'Display',
+            fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
             fontSize: 20,
             fontWeight: FontWeight.w700,
             color: Colors.white,
@@ -45,6 +46,24 @@ class AppearanceSettingsScreen extends StatelessWidget {
                   activeThumbColor: const Color(0xFF00C853), // Modern premium green
                   onChanged: (val) {
                     SettingsService().animatedArtworkEnabled.value = val;
+                  },
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 4),
+          ValueListenableBuilder<bool>(
+            valueListenable: SettingsService().showBackgroundInFullScreenArtwork,
+            builder: (context, enabled, _) {
+              return _buildSettingTile(
+                title: 'Full Screen Background',
+                subtitle: 'Show ambient background instead of solid black behind artwork',
+                icon: Icons.layers_outlined,
+                trailing: Switch.adaptive(
+                  value: enabled,
+                  activeThumbColor: const Color(0xFF00C853),
+                  onChanged: (val) {
+                    SettingsService().showBackgroundInFullScreenArtwork.value = val;
                   },
                 ),
               );
@@ -108,7 +127,7 @@ class AppearanceSettingsScreen extends StatelessWidget {
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 17,
-                fontFamily: 'Display',
+                fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                 fontWeight: FontWeight(1000),
               ),
             ),
@@ -119,7 +138,7 @@ class AppearanceSettingsScreen extends StatelessWidget {
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.5),
                   fontSize: 14,
-                  fontFamily: 'Display',
+                  fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                   fontWeight: FontWeight.w400,
                 ),
               ),
@@ -147,7 +166,7 @@ class AppearanceSettingsScreen extends StatelessWidget {
                   color: Color(0xFF00C853),
                   fontSize: 8,
                   fontWeight: FontWeight(1000),
-                  fontFamily: 'Display',
+                  fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                   letterSpacing: 0.5,
                 ),
               ),

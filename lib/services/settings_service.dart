@@ -25,6 +25,9 @@ class SettingsService {
   final ValueNotifier<double> parallaxStrength = ValueNotifier<double>(1.0);
   final ValueNotifier<bool> performanceModeEnabled = ValueNotifier<bool>(false);
   final ValueNotifier<bool> animatedArtworkEnabled = ValueNotifier<bool>(true);
+  final ValueNotifier<bool> showBackgroundInFullScreenArtwork = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> isFullScreenArtworkOpen = ValueNotifier<bool>(false);
+  
   final ValueNotifier<BackgroundStyle> backgroundStyle = ValueNotifier<BackgroundStyle>(BackgroundStyle.spinningBlur);
   
   final ValueNotifier<double> blurIntensity = ValueNotifier<double>(10.0);
@@ -48,6 +51,7 @@ class SettingsService {
     parallaxStrength.value = _readDouble('parallax_strength') ?? 1.0;
     performanceModeEnabled.value = _readBool('performance_mode_enabled') ?? false;
     animatedArtworkEnabled.value = _readBool('animated_artwork_enabled') ?? true;
+    showBackgroundInFullScreenArtwork.value = _readBool('show_background_in_full_screen_artwork') ?? false;
     
     final styleIndex = _readInt('background_style') ?? 0;
     backgroundStyle.value = BackgroundStyle.values[styleIndex.clamp(0, BackgroundStyle.values.length - 1)];
@@ -90,6 +94,9 @@ class SettingsService {
     });
     animatedArtworkEnabled.addListener(() {
       _prefs.setBool('animated_artwork_enabled', animatedArtworkEnabled.value);
+    });
+    showBackgroundInFullScreenArtwork.addListener(() {
+      _prefs.setBool('show_background_in_full_screen_artwork', showBackgroundInFullScreenArtwork.value);
     });
     backgroundStyle.addListener(() {
       _prefs.setInt('background_style', backgroundStyle.value.index);

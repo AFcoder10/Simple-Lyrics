@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:simple_lyrics/core/font_fallbacks.dart';
+import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
 
 /// Dedicated screen for lyrics-related settings.
@@ -17,7 +18,7 @@ class LyricsSettingsScreen extends StatelessWidget {
         elevation: 0,
         title: const Text(
           'Lyrics Settings',
-          style: TextStyle(fontFamily: 'Display', fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
+          style: TextStyle(fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks, fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 20),
@@ -52,7 +53,7 @@ class LyricsSettingsScreen extends StatelessWidget {
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          fontFamily: 'Display',
+                          fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                         ),
                       ),
                     ),
@@ -71,7 +72,7 @@ class LyricsSettingsScreen extends StatelessWidget {
           // Lyrics Offset
           _buildSettingTile(
             title: 'Lyrics Offset',
-            subtitle: 'Sync lyrics timing (Â±10s in 50ms steps)',
+            subtitle: 'Sync lyrics timing (±10s in 50ms steps)',
             icon: Icons.speed_rounded,
             trailing: ValueListenableBuilder<int>(
               valueListenable: settings.lyricsOffsetMs,
@@ -100,7 +101,7 @@ class LyricsSettingsScreen extends StatelessWidget {
                               color: Colors.white,
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              fontFamily: 'Display',
+                              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                             ),
                           ),
                           Text(
@@ -108,7 +109,7 @@ class LyricsSettingsScreen extends StatelessWidget {
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.5),
                               fontSize: 10,
-                              fontFamily: 'Display',
+                              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                             ),
                           ),
                         ],
@@ -206,7 +207,7 @@ class LyricsSettingsScreen extends StatelessWidget {
           style: const TextStyle(
             color: Colors.white,
             fontSize: 17,
-            fontFamily: 'Display',
+            fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
             fontWeight: FontWeight(1000),
           ),
         ),
@@ -217,7 +218,7 @@ class LyricsSettingsScreen extends StatelessWidget {
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.5),
               fontSize: 14,
-              fontFamily: 'Display',
+              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
               fontWeight: FontWeight.w400,
             ),
           ),

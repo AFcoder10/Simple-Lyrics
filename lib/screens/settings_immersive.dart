@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:simple_lyrics/core/font_fallbacks.dart';
+import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
 
 class ImmersiveEffectsSettingsScreen extends StatelessWidget {
@@ -15,7 +16,7 @@ class ImmersiveEffectsSettingsScreen extends StatelessWidget {
         elevation: 0,
         title: const Text(
           'Immersive Effects',
-          style: TextStyle(fontFamily: 'Display', fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
+          style: TextStyle(fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks, fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 20),
@@ -64,22 +65,6 @@ class ImmersiveEffectsSettingsScreen extends StatelessWidget {
             },
           ),
 
-          const SizedBox(height: 16),
-          _buildSettingTile(
-            title: 'Performance Mode',
-            subtitle: 'Reduce motion effects on slower devices',
-            icon: Icons.battery_saver_rounded,
-            trailing: ValueListenableBuilder<bool>(
-              valueListenable: settings.performanceModeEnabled,
-              builder: (context, enabled, _) {
-                return Switch.adaptive(
-                  value: enabled,
-                  onChanged: (val) => settings.performanceModeEnabled.value = val,
-                  activeThumbColor: const Color(0xFF1DB954),
-                );
-              },
-            ),
-          ),
         ],
       ),
     );
@@ -119,7 +104,7 @@ class ImmersiveEffectsSettingsScreen extends StatelessWidget {
           style: const TextStyle(
             color: Colors.white,
             fontSize: 17,
-            fontFamily: 'Display',
+            fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
             fontWeight: FontWeight(1000),
           ),
         ),
@@ -130,7 +115,7 @@ class ImmersiveEffectsSettingsScreen extends StatelessWidget {
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.5),
               fontSize: 14,
-              fontFamily: 'Display',
+              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
               fontWeight: FontWeight.w400,
             ),
           ),
@@ -179,7 +164,7 @@ class ImmersiveEffectsSettingsScreen extends StatelessWidget {
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 17,
-                            fontFamily: 'Display',
+                            fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                             fontWeight: FontWeight(1000),
                           ),
                         ),

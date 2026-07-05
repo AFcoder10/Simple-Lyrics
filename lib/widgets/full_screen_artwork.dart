@@ -1,3 +1,4 @@
+import 'package:simple_lyrics/core/font_fallbacks.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import '../services/media_session_service.dart';
 import '../services/settings_service.dart';
 import 'animated_artwork_player.dart';
 import 'playback_controls.dart';
+import 'backgrounds/background_controller.dart';
 
 class FullScreenArtwork extends StatefulWidget {
   final Uint8List? artBytes;
@@ -85,6 +87,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
     final delta = (state.position.inMilliseconds - _visualPositionNotifier.value.inMilliseconds).abs();
     final songChanged = state.title != previousState.title ||
         state.artist != previousState.artist;
+    
     if (delta > 1000 || songChanged) {
       _visualPositionNotifier.value = state.position;
     }
@@ -246,13 +249,17 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
           );
         }
       },
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: ValueListenableBuilder<bool>(
-          valueListenable: SettingsService().animatedArtworkEnabled,
+      child: ValueListenableBuilder<bool>(
+        valueListenable: SettingsService().showBackgroundInFullScreenArtwork,
+        builder: (context, showBg, _) {
+          return Scaffold(
+            backgroundColor: showBg ? Colors.transparent : Colors.black,
+            body: ValueListenableBuilder<bool>(
+              valueListenable: SettingsService().animatedArtworkEnabled,
           builder: (context, animatedEnabled, _) {
             final hasTallUrl = _mediaState.tallMasterUrl != null &&
                 _mediaState.tallMasterUrl!.isNotEmpty;
+
             final isLiveActive = animatedEnabled && hasTallUrl;
 
             final songChanged = _mediaState.title != widget.title ||
@@ -279,19 +286,47 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                         ],
                       ),
                     ),
-                    child: const Icon(
-                      Icons.music_note_rounded,
-                      color: Colors.white38,
-                      size: 80,
+                    child: const Center(
+                      child: Icon(Icons.music_note, size: 64, color: Colors.white24),
                     ),
                   );
 
-            final livePlaceholder = art != null && art.isNotEmpty
-                ? _buildTallPlaceholder(
-                    Image.memory(
-                      art,
-                      fit: BoxFit.cover,
-                      alignment: Alignment.topCenter,
+            Widget _buildTallPlaceholder(Widget staticPlaceholder) {
+              if (showBg) {
+                // If the user wants the background to show, don't block it with an opaque blurred placeholder
+                return const SizedBox.expand();
+              }
+              return art != null && art.isNotEmpty
+                  ? RepaintBoundary(
+                      child: ClipRect(
+                        child: Transform.scale(
+                          scale: 1.15,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              staticPlaceholder,
+                              BackdropFilter(
+                                filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+                                child: Container(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  : staticPlaceholder;
+            }
+
+            final tallStaticBackground = _mediaState.tallMasterUrl != null &&
+                    _mediaState.tallMasterUrl!.isNotEmpty &&
+                    !animatedEnabled
+                ? RepaintBoundary(
+                    child: Image.memory(
+                      art!,
+                      fit: BoxFit.fitWidth,
+                      alignment: Alignment.bottomCenter,
                       gaplessPlayback: true,
                     ),
                   )
@@ -312,11 +347,11 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                 Positioned.fill(
                   child: Stack(
                     children: [
-                      // Normal static artwork background is pure black
+                      // Normal static artwork background is pure black (or transparent if setting is enabled)
                       Positioned.fill(
-                        child: Container(color: Colors.black),
+                        child: Container(color: showBg ? Colors.transparent : Colors.black),
                       ),
-                      // Dynamic color background from bottom 8 pixels of LIVE artwork
+                      // Dynamic reactive solid color from extreme GPU stretch
                       if (isLiveActive)
                         Positioned.fill(
                           child: IgnorePointer(
@@ -325,7 +360,8 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                               children: [
                                 ClipRect(
                                   child: Transform.scale(
-                                    scaleY: 100.0, // Stretches the bottom ~8 pixels to fill the entire screen!
+                                    scaleX: 1.0, 
+                                    scaleY: 1000.0, // Stretch vertically to fill screen
                                     alignment: Alignment.bottomCenter,
                                     child: AnimatedArtworkPlayer(
                                       url: _mediaState.tallMasterUrl!,
@@ -336,9 +372,9 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                                     ),
                                   ),
                                 ),
-                                // Smooth out the stretched pixels into a perfect gradient
+                                // Moderate horizontal diffusive blur to prevent severe lag
                                 BackdropFilter(
-                                  filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                                  filter: ImageFilter.blur(sigmaX: 200, sigmaY: 200),
                                   child: Container(color: Colors.transparent),
                                 ),
                               ],
@@ -426,7 +462,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                                           blendMode: BlendMode.dstIn,
                                           child: AnimatedArtworkPlayer(
                                             url: _mediaState.tallMasterUrl!,
-                                            placeholder: livePlaceholder,
+                                            placeholder: tallStaticBackground,
                                             fit: BoxFit.fitWidth,
                                             alignment: Alignment.topCenter,
                                           ),
@@ -450,33 +486,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                   ),
                 ),
 
-                // 4. Subtle dark gradient overlays for legibility
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: AnimatedOpacity(
-                      opacity: isLiveActive ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 900),
-                      curve: Curves.easeInOutCubic,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.40), // status bar contrast
-                              Colors.transparent,                   // perfectly clean video view in the middle
-                              Colors.black.withValues(alpha: 0.15), // subtle darkening for lyrics
-                              Colors.black.withValues(alpha: 0.45), // controls contrast
-                            ],
-                            stops: const [0.0, 0.20, 0.70, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // 4.1. (Removed buggy BackdropFilter fade zone, now using native ImageFiltered in Super Stack above)
+                // 4. Subtle dark gradient overlays for legibility removed per user request
 
                 // 5. Immersive Drag / Tap to Dismiss Gesture layer
                 GestureDetector(
@@ -490,22 +500,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                   child: const SizedBox.expand(),
                 ),
 
-                // 6. Premium Top Drag indicator handle
-                Positioned(
-                  top: MediaQuery.of(context).padding.top + 12,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      width: 36,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.35),
-                        borderRadius: BorderRadius.circular(2.5),
-                      ),
-                    ),
-                  ),
-                ),
+                // Drag indicator handle removed as requested
 
                 // 7. Dynamic Overlay Panel for Metadata and Playback Controls
                 Positioned.fill(
@@ -542,9 +537,11 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
             );
           },
         ),
-      ),
-    );
-  }
+      );
+    },
+  ),
+);
+}
 
   Widget _buildLiveOverlays(Animation<double> metadataFade, Animation<double> controlsFade) {
     return Positioned(
@@ -565,12 +562,14 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 40),
                     child: Text(
-                       _mediaState.title,
+                      _mediaState.title,
                       textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontFamily: 'Display',
+                        fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                         color: Colors.white,
-                        fontSize: 26,
+                        fontSize: 24,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -0.5,
                       ),
@@ -581,14 +580,17 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                 Material(
                   type: MaterialType.transparency,
                   child: Text(
-                     _mediaState.artist,
-                    style: TextStyle(
-                      fontFamily: 'Display',
-                      color: Colors.white.withValues(alpha: 0.75),
-                      fontSize: 18,
-                      fontWeight: FontWeight.w400,
+                      _mediaState.artist,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                        color: Colors.white.withValues(alpha: 0.75),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
-                  ),
                 ),
               ],
             ),
@@ -634,19 +636,14 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                     child: Text(
                       _mediaState.title,
                       textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontFamily: 'Display',
+                        fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                         color: Colors.white,
-                        fontSize: 26,
+                        fontSize: 24,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -0.5,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black54,
-                            offset: Offset(0, 2),
-                            blurRadius: 10,
-                          ),
-                        ],
                       ),
                     ),
                   ),
@@ -656,18 +653,14 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                   type: MaterialType.transparency,
                   child: Text(
                     _mediaState.artist,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: 'Display',
+                      fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                       color: Colors.white.withValues(alpha: 0.75),
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.w400,
-                      shadows: const [
-                        Shadow(
-                          color: Colors.black54,
-                          offset: Offset(0, 2),
-                          blurRadius: 8,
-                        ),
-                      ],
                     ),
                   ),
                 ),

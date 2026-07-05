@@ -1,3 +1,4 @@
+import 'package:simple_lyrics/core/font_fallbacks.dart';
 import 'package:flutter/material.dart';
 import '../services/cache_service.dart';
 import '../services/media_session_service.dart';
@@ -88,7 +89,7 @@ class _CacheScreenState extends State<CacheScreen> {
             title: const Text(
               'Manage Cache',
               style: TextStyle(
-                fontFamily: 'Display',
+                fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                 fontSize: 22,
                 color: Colors.white,
               ),
@@ -140,22 +141,44 @@ class _CacheScreenState extends State<CacheScreen> {
                     ),
                     const SizedBox(height: 12),
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(
-                          child: Text(
-                            '${sortedKeys.length} of ${_cacheIndex.length} songs / ${_formatBytes(_cacheSizeBytes)}',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.42),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                        Text(
+                          '${sortedKeys.length} of ${_cacheIndex.length} songs / ${_formatBytes(_cacheSizeBytes)}',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.42),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500, // Regular-ish weight for subtitle
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<_CacheSortMode>(
+                              value: _sortMode,
+                              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white70, size: 20),
+                              dropdownColor: const Color(0xFF1E1E1E),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              onChanged: (mode) {
+                                if (mode != null) setState(() => _sortMode = mode);
+                              },
+                              items: const [
+                                DropdownMenuItem(value: _CacheSortMode.recent, child: Text('Sort by Recent')),
+                                DropdownMenuItem(value: _CacheSortMode.title, child: Text('Sort by Title')),
+                                DropdownMenuItem(value: _CacheSortMode.artist, child: Text('Sort by Artist')),
+                              ],
                             ),
                           ),
                         ),
-                        _buildSortChip('Recent', _CacheSortMode.recent),
-                        const SizedBox(width: 6),
-                        _buildSortChip('Title', _CacheSortMode.title),
-                        const SizedBox(width: 6),
-                        _buildSortChip('Artist', _CacheSortMode.artist),
                       ],
                     ),
                   ],
@@ -174,7 +197,7 @@ class _CacheScreenState extends State<CacheScreen> {
                     Text(
                       query.isEmpty ? 'No saved songs yet' : 'No matches found',
                       style: TextStyle(
-                        fontFamily: 'Display',
+                        fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                         color: Colors.white.withValues(alpha: 0.3),
                         fontSize: 16,
                       ),
@@ -236,8 +259,8 @@ class _CacheScreenState extends State<CacheScreen> {
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    fontFamily: 'Display',
+                                    fontWeight: FontWeight.w700,
+                                    fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -248,7 +271,7 @@ class _CacheScreenState extends State<CacheScreen> {
                                   style: TextStyle(
                                     color: Colors.white.withValues(alpha: 0.5),
                                     fontSize: 14,
-                                    fontFamily: 'Display',
+                                    fontWeight: FontWeight.w400, // Regular font for artist subtitle
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -274,24 +297,7 @@ class _CacheScreenState extends State<CacheScreen> {
     );
   }
 
-  Widget _buildSortChip(String label, _CacheSortMode mode) {
-    final selected = _sortMode == mode;
-    return ChoiceChip(
-      selected: selected,
-      label: Text(label),
-      onSelected: (_) => setState(() => _sortMode = mode),
-      showCheckmark: false,
-      visualDensity: VisualDensity.compact,
-      labelStyle: TextStyle(
-        color: selected ? Colors.black : Colors.white.withValues(alpha: 0.7),
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-      ),
-      selectedColor: Colors.white,
-      backgroundColor: Colors.white.withValues(alpha: 0.08),
-      side: BorderSide(color: Colors.white.withValues(alpha: selected ? 0.0 : 0.08)),
-    );
-  }
+  // _buildSortChip removed
 
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes B';

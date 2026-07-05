@@ -6,6 +6,8 @@ import 'screens/home_screen.dart';
 import 'screens/permission_screen.dart';
 import 'services/settings_service.dart';
 
+import 'core/font_fallbacks.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -74,6 +76,7 @@ class _SimpleLyricsAppState extends State<SimpleLyricsApp> {
           onSurface: Colors.white,
         ),
         fontFamily: 'Inter',
+        fontFamilyFallback: kGlobalFontFallbacks,
         useMaterial3: true,
       ),
       routes: {

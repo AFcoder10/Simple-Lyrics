@@ -1,3 +1,4 @@
+import 'package:simple_lyrics/core/font_fallbacks.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../models/media_state.dart';
@@ -77,33 +78,11 @@ class _PlaybackControlsState extends State<PlaybackControls> {
       ),
     );
 
-    if (!widget.transparentBackground) {
-      content = ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: 0.0),
-                  Colors.black.withValues(alpha: 0.45),
-                ],
-              ),
-            ),
-            child: content,
-          ),
-        ),
-      );
-    } else {
-      content = Container(
-        width: double.infinity,
-        color: Colors.transparent,
-        child: content,
-      );
-    }
+    content = Container(
+      width: double.infinity,
+      color: Colors.transparent,
+      child: content,
+    );
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -174,8 +153,8 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.5),
                       fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      fontFamily: 'Display',
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                     ),
                   ),
                   Text(
@@ -183,8 +162,8 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.5),
                       fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      fontFamily: 'Display',
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                     ),
                   ),
                 ],
@@ -201,14 +180,14 @@ class _PlaybackControlsState extends State<PlaybackControls> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _TransportButton(
-          icon: Icons.skip_previous_rounded,
-          size: 40,
+          type: 'previous',
+          size: 32,
           onTap: () {
             widget.onInteraction();
             widget.service.previous();
           },
         ),
-        const SizedBox(width: 32),
+        const SizedBox(width: 40),
         _PlayPauseButton(
           isPlaying: widget.mediaState.isPlaying,
           onTap: () {
@@ -220,10 +199,10 @@ class _PlaybackControlsState extends State<PlaybackControls> {
             }
           },
         ),
-        const SizedBox(width: 32),
+        const SizedBox(width: 40),
         _TransportButton(
-          icon: Icons.skip_next_rounded,
-          size: 40,
+          type: 'next',
+          size: 32,
           onTap: () {
             widget.onInteraction();
             widget.service.next();
@@ -235,12 +214,12 @@ class _PlaybackControlsState extends State<PlaybackControls> {
 }
 
 class _TransportButton extends StatefulWidget {
-  final IconData icon;
+  final String type;
   final double size;
   final VoidCallback onTap;
 
   const _TransportButton({
-    required this.icon,
+    required this.type,
     required this.size,
     required this.onTap,
   });
@@ -252,14 +231,20 @@ class _TransportButton extends StatefulWidget {
 class _TransportButtonState extends State<_TransportButton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pressController;
+  late final Animation<double> _stretchAnimation;
 
   @override
   void initState() {
     super.initState();
     _pressController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 120),
-      reverseDuration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 120), // Fast enough to visibly stretch before finger lifts
+      reverseDuration: const Duration(milliseconds: 400), // Slow and smooth recovery
+    );
+    
+    // Animate from 1.0 (normal) to 1.6 (very noticeable horizontal stretch)
+    _stretchAnimation = Tween<double>(begin: 1.0, end: 1.6).animate(
+      CurvedAnimation(parent: _pressController, curve: Curves.easeOutQuart),
     );
   }
 
@@ -269,34 +254,50 @@ class _TransportButtonState extends State<_TransportButton>
     super.dispose();
   }
 
+  void _handleTapUp() {
+    // If the user tapped very quickly, the animation might barely have started.
+    // Ensure it stretches visibly before reversing.
+    if (_pressController.value < 0.5) {
+      _pressController.forward().then((_) {
+        if (mounted) _pressController.reverse();
+      });
+    } else {
+      _pressController.reverse();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // If it's 'next', anchor on the left so it stretches forward to the right.
+    // If it's 'previous', anchor on the right so it stretches backward to the left.
+    final alignment = widget.type == 'next' ? Alignment.centerLeft : Alignment.centerRight;
+
     return GestureDetector(
       onTapDown: (_) => _pressController.forward(),
-      onTapUp: (_) => _pressController.reverse(),
+      onTapUp: (_) => _handleTapUp(),
       onTapCancel: () => _pressController.reverse(),
       onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
-      child: ScaleTransition(
-        scale: Tween<double>(begin: 1.0, end: 0.82).animate(
-          CurvedAnimation(parent: _pressController, curve: Curves.easeOutCubic),
-        ),
-        child: ClipOval(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-            child: Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.10),
-              ),
-              child: Icon(
-                widget.icon,
-                size: widget.size,
-                color: Colors.white.withValues(alpha: 0.95),
-              ),
+      child: AnimatedBuilder(
+        animation: _stretchAnimation,
+        builder: (context, child) {
+          return Transform(
+            transform: Matrix4.diagonal3Values(
+              _stretchAnimation.value,
+              1.0 - ((_stretchAnimation.value - 1.0) * 0.25), // vertical squish for physics feel
+              1.0,
             ),
+            alignment: alignment,
+            child: child,
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+          child: CustomPaint(
+            size: Size(widget.size, widget.size),
+            painter: widget.type == 'next'
+                ? SleekSkipNextPainter(color: Colors.white)
+                : SleekSkipPreviousPainter(color: Colors.white),
           ),
         ),
       ),
@@ -341,31 +342,32 @@ class _PlayPauseButtonState extends State<_PlayPauseButton>
       onTapUp: (_) => _pressController.reverse(),
       onTapCancel: () => _pressController.reverse(),
       onTap: widget.onTap,
+      behavior: HitTestBehavior.opaque,
       child: ScaleTransition(
         scale: Tween<double>(begin: 1.0, end: 0.88).animate(
           CurvedAnimation(parent: _pressController, curve: Curves.easeOutCubic),
         ),
-        child: ClipOval(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(
-              width: 68,
-              height: 68,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.10),
-              ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                child: Icon(
-                  widget.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  key: ValueKey(widget.isPlaying),
-                  size: 38,
-                  color: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, anim) {
+              return FadeTransition(
+                opacity: anim,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.8, end: 1.0).animate(anim),
+                  child: child,
                 ),
-              ),
+              );
+            },
+            child: CustomPaint(
+              key: ValueKey(widget.isPlaying),
+              size: const Size(40, 40),
+              painter: widget.isPlaying
+                  ? SleekPausePainter(color: Colors.white)
+                  : SleekPlayPainter(color: Colors.white),
             ),
           ),
         ),
@@ -374,75 +376,137 @@ class _PlayPauseButtonState extends State<_PlayPauseButton>
   }
 }
 
-class _SecondaryControl extends StatefulWidget {
-  final IconData icon;
-  final bool isActive;
-  final VoidCallback onTap;
+// Custom Sleek Painters
 
-  const _SecondaryControl({
-    required this.icon,
-    required this.isActive,
-    required this.onTap,
-  });
+class SleekPlayPainter extends CustomPainter {
+  final Color color;
+  SleekPlayPainter({required this.color});
 
   @override
-  State<_SecondaryControl> createState() => _SecondaryControlState();
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color..style = PaintingStyle.fill;
+    final strokePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.12
+      ..strokeJoin = StrokeJoin.round;
+
+    final path = Path();
+    path.moveTo(size.width * 0.25, size.height * 0.15);
+    path.lineTo(size.width * 0.85, size.height * 0.5);
+    path.lineTo(size.width * 0.25, size.height * 0.85);
+    path.close();
+
+    canvas.drawPath(path, paint);
+    canvas.drawPath(path, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _SecondaryControlState extends State<_SecondaryControl>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pressController;
+class SleekPausePainter extends CustomPainter {
+  final Color color;
+  SleekPausePainter({required this.color});
 
   @override
-  void initState() {
-    super.initState();
-    _pressController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 100),
-      reverseDuration: const Duration(milliseconds: 200),
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color..style = PaintingStyle.fill;
+
+    final w = size.width * 0.25;
+    final r = Radius.circular(size.width * 0.1);
+    
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTRB(size.width * 0.15, size.height * 0.1, size.width * 0.15 + w, size.height * 0.9), r),
+      paint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTRB(size.width * 0.85 - w, size.height * 0.1, size.width * 0.85, size.height * 0.9), r),
+      paint,
     );
   }
 
   @override
-  void dispose() {
-    _pressController.dispose();
-    super.dispose();
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class SleekSkipNextPainter extends CustomPainter {
+  final Color color;
+  SleekSkipNextPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color..style = PaintingStyle.fill;
+    final strokePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.08
+      ..strokeJoin = StrokeJoin.round;
+
+    final p1 = Path();
+    p1.moveTo(size.width * 0.1, size.height * 0.2);
+    p1.lineTo(size.width * 0.45, size.height * 0.5);
+    p1.lineTo(size.width * 0.1, size.height * 0.8);
+    p1.close();
+    canvas.drawPath(p1, paint);
+    canvas.drawPath(p1, strokePaint);
+
+    final p2 = Path();
+    p2.moveTo(size.width * 0.45, size.height * 0.2);
+    p2.lineTo(size.width * 0.8, size.height * 0.5);
+    p2.lineTo(size.width * 0.45, size.height * 0.8);
+    p2.close();
+    canvas.drawPath(p2, paint);
+    canvas.drawPath(p2, strokePaint);
+
+    final bar = RRect.fromRectAndRadius(
+      Rect.fromLTRB(size.width * 0.85, size.height * 0.15, size.width * 0.95, size.height * 0.85),
+      Radius.circular(size.width * 0.05),
+    );
+    canvas.drawRRect(bar, paint);
   }
 
   @override
-  Widget build(BuildContext context) {
-    final color = widget.isActive
-        ? Colors.white
-        : Colors.white.withValues(alpha: 0.35);
-
-    return GestureDetector(
-      onTapDown: (_) => _pressController.forward(),
-      onTapUp: (_) => _pressController.reverse(),
-      onTapCancel: () => _pressController.reverse(),
-      onTap: widget.onTap,
-      behavior: HitTestBehavior.opaque,
-      child: ScaleTransition(
-        scale: Tween<double>(begin: 1.0, end: 0.85).animate(
-          CurvedAnimation(parent: _pressController, curve: Curves.easeOutCubic),
-        ),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: widget.isActive
-                ? Colors.white.withValues(alpha: 0.15)
-                : Colors.transparent,
-          ),
-          child: Icon(
-            widget.icon,
-            color: color,
-            size: 20,
-          ),
-        ),
-      ),
-    );
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
+
+class SleekSkipPreviousPainter extends CustomPainter {
+  final Color color;
+  SleekSkipPreviousPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color..style = PaintingStyle.fill;
+    final strokePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.08
+      ..strokeJoin = StrokeJoin.round;
+
+    final bar = RRect.fromRectAndRadius(
+      Rect.fromLTRB(size.width * 0.05, size.height * 0.15, size.width * 0.15, size.height * 0.85),
+      Radius.circular(size.width * 0.05),
+    );
+    canvas.drawRRect(bar, paint);
+
+    final p1 = Path();
+    p1.moveTo(size.width * 0.55, size.height * 0.2);
+    p1.lineTo(size.width * 0.2, size.height * 0.5);
+    p1.lineTo(size.width * 0.55, size.height * 0.8);
+    p1.close();
+    canvas.drawPath(p1, paint);
+    canvas.drawPath(p1, strokePaint);
+
+    final p2 = Path();
+    p2.moveTo(size.width * 0.9, size.height * 0.2);
+    p2.lineTo(size.width * 0.55, size.height * 0.5);
+    p2.lineTo(size.width * 0.9, size.height * 0.8);
+    p2.close();
+    canvas.drawPath(p2, paint);
+    canvas.drawPath(p2, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+

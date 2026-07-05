@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/font_fallbacks.dart';
 
 /// Karaoke-style text fill with a soft feathered edge.
 ///
@@ -40,16 +41,17 @@ class KaraokeTextFill extends StatelessWidget {
 
     // Glow for long-hold words
     final TextStyle glowingActiveStyle;
-    if (longHold && trail > 0.0 && trail < 1.0) {
+    if (longHold && trail > 0.0) {
       final fadeIn = (trail / 0.15).clamp(0.0, 1.0);
       final fadeOut = (1.0 - (trail - 0.75).clamp(0.0, 0.25) / 0.25).clamp(0.0, 1.0);
       final glow = fadeIn * fadeOut;
       glowingActiveStyle = activeStyle.copyWith(
         shadows: glow > 0.01
             ? [
-                Shadow(color: activeColor.withValues(alpha: 0.7 * glow), blurRadius: 10),
-                Shadow(color: activeColor.withValues(alpha: 0.4 * glow), blurRadius: 20),
-                Shadow(color: activeColor.withValues(alpha: 0.2 * glow), blurRadius: 32),
+                Shadow(
+                  color: activeColor.withValues(alpha: (0.6 * glow).clamp(0.0, 1.0)),
+                  blurRadius: 16.0,
+                ),
               ]
             : null,
       );
@@ -62,6 +64,10 @@ class KaraokeTextFill extends StatelessWidget {
     final featherStart = trail - 0.16;
     final featherEnd = trail + 0.12;
 
+    // Complex scripts (Hindi, Arabic, etc.) cannot be split into letters 
+    // because it breaks text shaping and creates dotted circles.
+    final bool useLetterSettle = longHold && !hasComplexScript(text);
+
     return _buildFillText(
       text: text,
       visualTrail: trail,
@@ -70,6 +76,7 @@ class KaraokeTextFill extends StatelessWidget {
       dimStyle: dimStyle,
       featherStart: featherStart,
       featherEnd: featherEnd,
+      useLetterSettle: useLetterSettle,
     );
   }
 
@@ -81,14 +88,15 @@ class KaraokeTextFill extends StatelessWidget {
     required TextStyle dimStyle,
     required double featherStart,
     required double featherEnd,
+    required bool useLetterSettle,
   }) {
     if (visualTrail <= 0.0) {
-      return longHold
+      return useLetterSettle
           ? _LetterSettleText(text: text, style: dimStyle, elapsedSeconds: elapsedSeconds, wordDuration: wordDuration)
           : Text(text, style: dimStyle);
     }
     if (visualTrail >= 1.0) {
-      return longHold
+      return useLetterSettle
           ? _LetterSettleText(text: text, style: glowingActiveStyle, elapsedSeconds: elapsedSeconds, wordDuration: wordDuration)
           : Text(text, style: activeStyle);
     }
@@ -96,7 +104,7 @@ class KaraokeTextFill extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        longHold
+        useLetterSettle
             ? _LetterSettleText(text: text, style: dimStyle, elapsedSeconds: elapsedSeconds, wordDuration: wordDuration)
             : Text(text, style: dimStyle),
         Positioned(
@@ -126,7 +134,7 @@ class KaraokeTextFill extends StatelessWidget {
             },
             child: Padding(
               padding: const EdgeInsets.all(48.0),
-              child: longHold
+              child: useLetterSettle
                   ? _LetterSettleText(
                       text: text,
                       style: glowingActiveStyle,

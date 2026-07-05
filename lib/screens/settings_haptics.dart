@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:simple_lyrics/core/font_fallbacks.dart';
+import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
 
 class HapticSettingsScreen extends StatelessWidget {
@@ -15,7 +16,7 @@ class HapticSettingsScreen extends StatelessWidget {
         elevation: 0,
         title: const Text(
           'Haptics',
-          style: TextStyle(fontFamily: 'Display', fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
+          style: TextStyle(fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks, fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 20),
@@ -135,7 +136,7 @@ class HapticSettingsScreen extends StatelessWidget {
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 17,
-                fontFamily: 'Display',
+                fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                 fontWeight: FontWeight(1000),
               ),
             ),
@@ -146,7 +147,7 @@ class HapticSettingsScreen extends StatelessWidget {
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.5),
                   fontSize: 14,
-                  fontFamily: 'Display',
+                  fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                   fontWeight: FontWeight.w400,
                 ),
               ),
@@ -174,7 +175,7 @@ class HapticSettingsScreen extends StatelessWidget {
                   color: Color(0xFF1DB954),
                   fontSize: 8,
                   fontWeight: FontWeight(1000),
-                  fontFamily: 'Display',
+                  fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                   letterSpacing: 0.5,
                 ),
               ),

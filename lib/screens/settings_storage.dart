@@ -1,8 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:simple_lyrics/core/font_fallbacks.dart';
+import 'package:flutter/material.dart';
 import '../services/media_session_service.dart';
 import '../services/cache_service.dart';
 import '../models/media_state.dart';
 import 'cache_screen.dart';
+import 'cache_summary_screen.dart';
 
 class StorageCacheSettingsScreen extends StatelessWidget {
   final MediaSessionService service;
@@ -18,7 +20,7 @@ class StorageCacheSettingsScreen extends StatelessWidget {
         elevation: 0,
         title: const Text(
           'Storage & Cache',
-          style: TextStyle(fontFamily: 'Display', fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
+          style: TextStyle(fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks, fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 20),
@@ -54,8 +56,18 @@ class StorageCacheSettingsScreen extends StatelessWidget {
                     ? 'Calculating saved lyrics and artwork'
                     : '${summary.count} songs / ${_formatBytes(summary.sizeBytes)}',
                 icon: Icons.bar_chart_rounded,
-                onTap: null,
-                enabled: false,
+                onTap: () {
+                  Navigator.of(context).push(
+                    PageRouteBuilder(
+                      pageBuilder: (context, animation, secondaryAnimation) => const CacheSummaryScreen(),
+                      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                        return FadeTransition(opacity: animation, child: child);
+                      },
+                      transitionDuration: const Duration(milliseconds: 300),
+                    ),
+                  );
+                },
+                enabled: true,
               );
             },
           ),
@@ -181,7 +193,7 @@ class StorageCacheSettingsScreen extends StatelessWidget {
           style: TextStyle(
             color: enabled ? Colors.white : Colors.white24,
             fontSize: 17,
-            fontFamily: 'Display',
+            fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
             fontWeight: FontWeight(1000),
           ),
         ),
@@ -192,7 +204,7 @@ class StorageCacheSettingsScreen extends StatelessWidget {
             style: TextStyle(
               color: enabled ? Colors.white.withValues(alpha: 0.5) : Colors.white10,
               fontSize: 14,
-              fontFamily: 'Display',
+              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
               fontWeight: FontWeight.w400,
             ),
           ),

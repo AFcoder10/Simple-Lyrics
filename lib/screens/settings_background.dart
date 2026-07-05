@@ -1,3 +1,4 @@
+import 'package:simple_lyrics/core/font_fallbacks.dart';
 import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
 
@@ -15,7 +16,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
         elevation: 0,
         title: const Text(
           'Background Style',
-          style: TextStyle(fontFamily: 'Display', fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
+          style: TextStyle(fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks, fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 20),
@@ -63,7 +64,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
                                   color: Colors.white,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
-                                  fontFamily: 'Inter',
+                                  fontFamily: 'Inter', fontFamilyFallback: kGlobalFontFallbacks,
                                 ),
                               ),
                             ],
@@ -127,7 +128,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
                                   icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white70),
                                   label: const Text(
                                     'Reset Defaults',
-                                    style: TextStyle(color: Colors.white70, fontFamily: 'Display'),
+                                    style: TextStyle(color: Colors.white70, fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks),
                                   ),
                                   style: TextButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -184,7 +185,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
                                   icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white70),
                                   label: const Text(
                                     'Reset Defaults',
-                                    style: TextStyle(color: Colors.white70, fontFamily: 'Display'),
+                                    style: TextStyle(color: Colors.white70, fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks),
                                   ),
                                   style: TextButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -250,7 +251,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
                                   icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white70),
                                   label: const Text(
                                     'Reset Defaults',
-                                    style: TextStyle(color: Colors.white70, fontFamily: 'Display'),
+                                    style: TextStyle(color: Colors.white70, fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks),
                                   ),
                                   style: TextButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -290,7 +291,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.4),
               fontSize: 12,
-              fontFamily: 'Display',
+              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
             ),
@@ -318,7 +319,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.4),
                 fontSize: 13,
-                fontFamily: 'Display',
+                fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                 fontWeight: FontWeight.w400,
                 height: 1.4,
               ),
@@ -354,7 +355,7 @@ class BackgroundSettingsScreen extends StatelessWidget {
                       color: Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
-                      fontFamily: 'Inter',
+                      fontFamily: 'Inter', fontFamilyFallback: kGlobalFontFallbacks,
                     ),
                   ),
                 ],

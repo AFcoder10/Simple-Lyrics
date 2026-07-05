@@ -178,6 +178,8 @@ class ArtworkService {
         'storefront': 'us',
         'artwork_type': 'tall',
         'quality': 720,
+        'width': 720,
+        'height': 960,
       }));
 
       final request = await _client.postUrl(Uri.parse('https://bareminimum-lyrics.vercel.app/api/v1/animated-artwork'));
@@ -208,8 +210,15 @@ class ArtworkService {
       if (animatedJson == null) return;
 
       final animArtworks = animatedJson['animated_artworks'] as Map<String, dynamic>?;
-      final tallUrl = (animatedJson['tall_master_url'] as String?) ??
+      
+      // Look for the custom_size_url first (since we requested exact dimensions), fallback to masters
+      final tallUrl = (animatedJson['custom_size_url'] as String?) ??
+                      (animatedJson['tall_master_url'] as String?) ??
                       (animArtworks?['tall']?['master_url'] as String?) ?? '';
+                      
+      // We also need the custom square one for the floating card. The API returns it if we ask.
+      // But we sent 'artwork_type': 'tall' in the body, so the custom_size_url is the tall one.
+      // We will just use the master URLs. The player handles ABR.
       final squareUrl = (animatedJson['square_master_url'] as String?) ??
                         (animArtworks?['square']?['master_url'] as String?) ?? '';
 

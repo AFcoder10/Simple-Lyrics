@@ -1,3 +1,4 @@
+import 'package:simple_lyrics/core/font_fallbacks.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/media_state.dart';
@@ -88,11 +89,13 @@ class NowPlayingHeader extends StatelessWidget {
 
   Widget _buildAlbumArt(BuildContext context, Uint8List? artBytes) {
     return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
+      onTap: () async {
+        final showBg = SettingsService().showBackgroundInFullScreenArtwork.value;
+        SettingsService().isFullScreenArtworkOpen.value = true;
+        await Navigator.of(context).push(
           PageRouteBuilder(
             opaque: false,
-            barrierColor: Colors.black.withValues(alpha: 0.8),
+            barrierColor: showBg ? Colors.transparent : Colors.black.withValues(alpha: 0.8),
             transitionDuration: const Duration(milliseconds: 550),
             reverseTransitionDuration: const Duration(milliseconds: 450),
             pageBuilder: (context, _, _) => FullScreenArtwork(
@@ -112,6 +115,7 @@ class NowPlayingHeader extends StatelessWidget {
             },
           ),
         );
+        SettingsService().isFullScreenArtworkOpen.value = false;
       },
       child: Hero(
         tag: 'album_art',
@@ -268,7 +272,7 @@ class NowPlayingHeader extends StatelessWidget {
           child: _MarqueeText(
             text: title,
             style: const TextStyle(
-              fontFamily: 'Display',
+              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
               color: Colors.white,
               fontSize: 20,
               fontWeight: FontWeight.w700,
@@ -283,7 +287,7 @@ class NowPlayingHeader extends StatelessWidget {
           child: _MarqueeText(
             text: artist,
             style: TextStyle(
-              fontFamily: 'Display',
+              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
               color: Colors.white.withValues(alpha: 0.7),
               fontSize: 16,
               fontWeight: FontWeight.w400,

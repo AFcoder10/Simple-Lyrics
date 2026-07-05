@@ -241,11 +241,11 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
             if (!mounted) return;
             if (_scrollController.hasClients) {
               try {
-                _scrollController.animateTo(
-                  _scrollController.position.minScrollExtent,
-                  duration: const Duration(milliseconds: 600),
-                  curve: Curves.easeOutCubic,
-                );
+                  _scrollController.animateTo(
+                    _scrollController.position.minScrollExtent,
+                    duration: const Duration(milliseconds: 900),
+                    curve: Curves.easeOutCirc,
+                  );
               } catch (_) {
                 // ignore any controller errors
               }
@@ -280,8 +280,8 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
 
     int newFocus = -1;
     for (int i = 0; i < data.lines.length; i++) {
-      // Look-ahead: Set focus to the next line 0.6s before it starts.
-      if (data.lines[i].startTime <= sec + 0.6) {
+      // Look-ahead: Set focus to the next line 0.2s before it starts.
+      if (data.lines[i].startTime <= sec + 0.2) {
         if (!data.lines[i].isBackground) {
           newFocus = i;
         }
@@ -475,12 +475,12 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
 
     final distance = (_scrollController.offset - clampedOffset).abs();
     if (distance < 1.0) return;
-    final durationMs = (distance * 3.5).clamp(700.0, 1600.0).toInt();
+    final durationMs = (distance * 3.8).clamp(900.0, 1800.0).toInt();
 
     _scrollController.animateTo(
       clampedOffset,
       duration: Duration(milliseconds: durationMs),
-      curve: Curves.easeOutQuart,
+      curve: Curves.easeOutCirc,
     );
   }
 
@@ -583,7 +583,8 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                         textAlign: TextAlign.left,
                         text: TextSpan(
                           style: TextStyle(
-                            fontFamily: 'Display',
+                            fontFamily: hasComplexScript(data.songwriters.join(', ')) ? 'Roboto' : 'Display',
+                            fontFamilyFallback: hasComplexScript(data.songwriters.join(', ')) ? null : kGlobalFontFallbacks,
                             color: Colors.white.withValues(alpha: 0.9),
                             fontSize: 18,
                           ),
@@ -591,14 +592,16 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                             const TextSpan(
                               text: 'Written by: ',
                               style: TextStyle(
-                                fontFamily: 'Heavy',
+                                fontFamily: 'Heavy', fontFamilyFallback: kGlobalFontFallbacks,
                                 fontWeight: FontWeight(1000),
                                 letterSpacing: 0.1,
                               ),
                             ),
                             TextSpan(
                               text: data.songwriters.join(', '),
-                              style: const TextStyle(
+                              style: TextStyle(
+                                fontFamily: hasComplexScript(data.songwriters.join(', ')) ? 'Roboto' : 'Heavy',
+                                fontFamilyFallback: hasComplexScript(data.songwriters.join(', ')) ? null : kGlobalFontFallbacks,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -910,56 +913,18 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
   }
 
   Future<void> _triggerWordHaptic(LyricsWord word) async {
-    if (_isWordVibrating) {
-      Vibration.cancel();
-    }
-    _isWordVibrating = true;
-    
-    final durationMs = ((word.endTime - word.startTime) * 1000).toInt();
-    if (durationMs <= 20) {
-      _isWordVibrating = false;
-      return;
-    }
-
-    // We split the word duration into several segments of increasing intensity
-    const steps = 5;
-    final stepDur = (durationMs / steps).floor();
-    if (stepDur < 12) return; // Too short for a ramp
-
     final settings = SettingsService();
     final globalIntensity = settings.hapticIntensity.value;
     
-    // If intensity is very low, skip to save battery/cycles
-    if (globalIntensity < 0.05) {
-      _isWordVibrating = false;
-      return;
-    }
+    if (globalIntensity < 0.05) return;
 
-    // Smart Scaling: Use a power curve (1.5) so that low slider values 
-    // feel significantly weaker, while high values stay powerful.
-    final curvedIntensity = globalIntensity * globalIntensity; // squared for better low-end control
-
-    for (int i = 1; i <= steps; i++) {
-      // Re-read intensity in case it changed mid-word
-      final currentGlobal = settings.hapticIntensity.value;
-      final currentCurve = currentGlobal * currentGlobal;
-      
-      // Smart Ramp: Scale both the starting point and the peak.
-      // At low slider values, the 'start' becomes very faint (near 0).
-      final startFloor = 20 * currentCurve; 
-      final peakCeiling = 255 * currentCurve;
-      
-      final baseIntensity = startFloor + (peakCeiling - startFloor) * (i / steps);
-      final intensity = baseIntensity.toInt().clamp(0, 255);
-      
-      // If the hardware doesn't support amplitude, we can't do much, 
-      // but individual calls with amplitude are the most compatible way.
-      Vibration.vibrate(duration: stepDur, amplitude: intensity);
-      
-      await Future.delayed(Duration(milliseconds: stepDur));
-    }
+    // A single, sharp, 15ms pulse creates a precise rhythmic tap.
+    // We scale the amplitude based on the user's intensity preference.
+    final curvedIntensity = globalIntensity * globalIntensity;
+    final peakCeiling = 255 * curvedIntensity;
+    final intensity = peakCeiling.toInt().clamp(10, 255);
     
-    _isWordVibrating = false;
+    Vibration.vibrate(duration: 15, amplitude: intensity);
   }
 
   @override
@@ -1013,7 +978,8 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
                   elapsedSeconds: lineSeconds - word.startTime,
                   wordDuration: dur,
                   style: TextStyle(
-                    fontFamily: 'Heavy',
+                    fontFamily: hasComplexScript(word.text) ? 'Roboto' : 'Heavy',
+                    fontFamilyFallback: hasComplexScript(word.text) ? null : kGlobalFontFallbacks,
                     fontSize: effectiveFontSize,
                     fontWeight: FontWeight(1000),
                     letterSpacing: -0.6,
@@ -1076,7 +1042,8 @@ class _StaticLine extends StatelessWidget {
                   ? TextAlign.right
                   : TextAlign.left,
               style: TextStyle(
-                fontFamily: 'Heavy',
+                fontFamily: hasComplexScript(text ?? line.text) ? 'Roboto' : 'Heavy',
+                fontFamilyFallback: hasComplexScript(text ?? line.text) ? null : kGlobalFontFallbacks,
                 fontSize: effectiveFontSize,
                 fontWeight: FontWeight(1000),
                 letterSpacing: -0.6,

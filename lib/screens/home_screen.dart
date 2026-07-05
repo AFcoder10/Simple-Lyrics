@@ -418,69 +418,123 @@ class _HomeScreenState extends State<HomeScreen>
                   },
                 ),
               ),
-              // 20% black tint specifically for the home screen (covers lyrics and metadata)
+              // Fading UI layer
               Positioned.fill(
-                child: IgnorePointer(
-                  child: Container(color: Colors.black.withValues(alpha: 0.18)),
-                ),
-              ),
-              if (isEmptyState)
-                const Positioned.fill(
-                  child: IgnorePointer(
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.music_note_rounded,
-                            size: 72,
-                            color: Colors.white24,
-                          ),
-                          SizedBox(height: 16),
-                          Text(
-                            'Waiting for music…',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Play a song or grant notification access.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white38,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              Stack(
-                children: [
-                  Column(
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: SettingsService().isFullScreenArtworkOpen,
+                  builder: (context, isFullScreenOpen, child) {
+                    return AnimatedOpacity(
+                      opacity: isFullScreenOpen ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeInOut,
+                      child: child,
+                    );
+                  },
+                  child: Stack(
                     children: [
-                      NowPlayingHeader(
-                        mediaState: _mediaState,
-                        service: widget.service,
-                        onSettingsClosed: () {
-                          _lyricsKey.currentState?.resetAutoScroll();
-                        },
+                      // 20% black tint specifically for the home screen (covers lyrics and metadata)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: Container(color: Colors.black.withValues(alpha: 0.18)),
+                        ),
                       ),
-                      Expanded(
-                        child: RepaintBoundary(
-                          child: isEmptyState
-                              ? const SizedBox.shrink()
-                              : ValueListenableBuilder<bool>(
-                                  valueListenable: SettingsService().performanceModeEnabled,
-                                  builder: (context, performanceMode, _) {
-                                    return _LyricsHeaderFade(
-                                      enabled: _lyricsHeaderFadeEnabled && !performanceMode,
-                                      child: LyricsView(
+                      if (isEmptyState)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(
+                                    Icons.music_note_rounded,
+                                    size: 72,
+                                    color: Colors.white24,
+                                  ),
+                                  SizedBox(height: 16),
+                                  Text(
+                                    'Waiting for music…',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'Play a song or grant notification access.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white38,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      Stack(
+                        children: [
+                          Column(
+                            children: [
+                              NowPlayingHeader(
+                                mediaState: _mediaState,
+                                service: widget.service,
+                                onSettingsClosed: () {
+                                  _lyricsKey.currentState?.resetAutoScroll();
+                                },
+                              ),
+                              Expanded(
+                                child: RepaintBoundary(
+                                  child: isEmptyState
+                                      ? const SizedBox.shrink()
+                                      : TweenAnimationBuilder<double>(
+                                          tween: Tween<double>(
+                                              begin: 0.0,
+                                              end: _controlsVisible ? 1.0 : 0.0),
+                                          duration: const Duration(milliseconds: 250),
+                                          curve: Curves.easeInOut,
+                                          builder: (context, value, child) {
+                                            return ShaderMask(
+                                              shaderCallback: (rect) {
+                                                // Start fading out 240px from bottom
+                                                final fadeStart =
+                                                    (rect.height - 240) / rect.height;
+                                                // Fully transparent by 190px from bottom (just above the progress bar)
+                                                final fadeEnd = 
+                                                    (rect.height - 190) / rect.height;
+                                                
+                                                final maskColor = Color.lerp(Colors.white,
+                                                        Colors.transparent, value)!;
+                                                        
+                                                return LinearGradient(
+                                                  begin: Alignment.topCenter,
+                                                  end: Alignment.bottomCenter,
+                                                  colors: [
+                                                    Colors.white,
+                                                    Colors.white,
+                                                    maskColor,
+                                                    maskColor,
+                                                  ],
+                                                  stops: [
+                                                    0.0,
+                                                    fadeStart.clamp(0.0, 1.0),
+                                                    fadeEnd.clamp(0.0, 1.0),
+                                                    1.0,
+                                                  ],
+                                                ).createShader(rect);
+                                              },
+                                              blendMode: BlendMode.dstIn,
+                                              child: child,
+                                            );
+                                          },
+                                          child: ValueListenableBuilder<bool>(
+                                            valueListenable: SettingsService().performanceModeEnabled,
+                                            builder: (context, performanceMode, _) {
+                                              return _LyricsHeaderFade(
+                                                enabled: _lyricsHeaderFadeEnabled && !performanceMode,
+                                                child: LyricsView(
                                         key: _lyricsKey,
                                         trackKey: '${_mediaState.title}|${_mediaState.artist}',
                                         lyricsData: _lyricsData,
@@ -494,10 +548,11 @@ class _HomeScreenState extends State<HomeScreen>
                                     );
                                   },
                                 ),
-                        ),
-                      ),
-                    ],
-                  ),
+                              ), // Closes TweenAnimationBuilder
+                            ), // Closes RepaintBoundary
+                          ), // Closes Expanded
+                        ],
+                      ), // Closes Column
                   PlaybackControls(
                     mediaState: _mediaState,
                     positionNotifier: _visualPositionNotifier,
@@ -523,9 +578,13 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ],
           ),
+        ), // End of ValueListenableBuilder
+      ), // End of Positioned.fill
+    ],
+  ),
+),
         ),
-      ),
-    );
+      );
   }
 }
 

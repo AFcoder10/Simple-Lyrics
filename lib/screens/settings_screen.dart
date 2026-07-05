@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:simple_lyrics/core/font_fallbacks.dart';
+import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../services/media_session_service.dart';
 import 'settings_appearance.dart';
@@ -27,7 +28,7 @@ class SettingsScreen extends StatelessWidget {
             title: const Text(
               'Settings',
               style: TextStyle(
-                fontFamily: 'Display',
+                fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
                 fontSize: 22,
                 fontWeight: FontWeight(1000),
                 color: Colors.white,
@@ -144,7 +145,7 @@ class SettingsScreen extends StatelessWidget {
           style: const TextStyle(
             color: Colors.white,
             fontSize: 17,
-            fontFamily: 'Display',
+            fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
             fontWeight: FontWeight(1000),
           ),
         ),
@@ -155,7 +156,7 @@ class SettingsScreen extends StatelessWidget {
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.5),
               fontSize: 14,
-              fontFamily: 'Display',
+              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
               fontWeight: FontWeight.w400,
             ),
           ),

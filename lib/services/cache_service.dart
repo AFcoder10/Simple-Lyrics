@@ -92,6 +92,43 @@ class CacheService {
     }
   }
 
+  static Future<CacheBreakdown> getCacheBreakdown() async {
+    try {
+      final base = await _baseDir();
+      int lyricsBytes = 0;
+      int artworkImagesBytes = 0;
+      int artworkMetaBytes = 0;
+
+      final lyricsDir = Directory('${base.path}/$_lyricsDirName');
+      if (await lyricsDir.exists()) {
+        await for (final entity in lyricsDir.list(recursive: true, followLinks: false)) {
+          if (entity is File) lyricsBytes += await entity.length();
+        }
+      }
+
+      final artworkDir = Directory('${base.path}/$_artworkDirName');
+      if (await artworkDir.exists()) {
+        await for (final entity in artworkDir.list(recursive: true, followLinks: false)) {
+          if (entity is File) {
+            if (entity.path.endsWith('_meta.json')) {
+              artworkMetaBytes += await entity.length();
+            } else {
+              artworkImagesBytes += await entity.length();
+            }
+          }
+        }
+      }
+
+      return CacheBreakdown(
+        lyricsBytes: lyricsBytes,
+        artworkImagesBytes: artworkImagesBytes,
+        liveArtworkLinkBytes: artworkMetaBytes,
+      );
+    } catch (_) {
+      return const CacheBreakdown(lyricsBytes: 0, artworkImagesBytes: 0, liveArtworkLinkBytes: 0);
+    }
+  }
+
   static Future<void> _updateIndex(String dirName, String key, String title, String artist) async {
     final base = await _baseDir();
     final indexFile = File('${base.path}/$dirName/index.json');
@@ -408,5 +445,19 @@ class CachedArtworkBytes {
     this.tallMasterUrl,
     this.squareMasterUrl,
     this.staticArtworkUrl,
+  });
+}
+
+class CacheBreakdown {
+  final int lyricsBytes;
+  final int artworkImagesBytes;
+  final int liveArtworkLinkBytes;
+
+  int get totalBytes => lyricsBytes + artworkImagesBytes + liveArtworkLinkBytes;
+
+  const CacheBreakdown({
+    required this.lyricsBytes,
+    required this.artworkImagesBytes,
+    required this.liveArtworkLinkBytes,
   });
 }

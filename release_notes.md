@@ -1,5 +1,6 @@
-# v1.0.9
-- Added animated artwork.
+# v1.10.0
+- Added global font fallbacks for universal language support.
+- Various UI and performance tweaks.
 
 # Removed Update Feature
 - It was causing android conflicting packages error

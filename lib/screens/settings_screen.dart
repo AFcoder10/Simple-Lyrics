@@ -7,11 +7,137 @@ import 'settings_lyrics.dart';
 import 'settings_immersive.dart';
 import 'settings_haptics.dart';
 import 'settings_storage.dart';
+import '../services/update_service.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   final MediaSessionService service;
 
   const SettingsScreen({super.key, required this.service});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _isCheckingForUpdate = false;
+  double _downloadProgress = 0.0;
+  bool _isDownloading = false;
+
+  Future<void> _checkForUpdate() async {
+    setState(() {
+      _isCheckingForUpdate = true;
+    });
+
+    final updateService = UpdateService();
+    final updateInfo = await updateService.checkForUpdate();
+
+    setState(() {
+      _isCheckingForUpdate = false;
+    });
+
+    if (!mounted) return;
+
+    if (updateInfo != null) {
+      showDialog(
+        context: context,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                backgroundColor: const Color(0xFF1E1E1E),
+                title: Text(
+                  'Update Available',
+                  style: TextStyle(
+                    fontFamily: 'Display',
+                    fontFamilyFallback: kGlobalFontFallbacks,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Version ${updateInfo.version} is ready to install.',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        updateInfo.notes.isEmpty ? 'No release notes.' : updateInfo.notes,
+                        style: const TextStyle(color: Colors.white60, fontSize: 13),
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (_isDownloading) ...[
+                      const SizedBox(height: 20),
+                      LinearProgressIndicator(
+                        value: _downloadProgress,
+                        backgroundColor: Colors.white12,
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: Text(
+                          '${(_downloadProgress * 100).toStringAsFixed(1)}%',
+                          style: const TextStyle(color: Colors.white54, fontSize: 12),
+                        ),
+                      ),
+                    ]
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: _isDownloading ? null : () => Navigator.of(context).pop(),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                  ),
+                  TextButton(
+                    onPressed: _isDownloading
+                        ? null
+                        : () async {
+                            setDialogState(() {
+                              _isDownloading = true;
+                            });
+                            await updateService.downloadAndInstall(
+                              updateInfo.downloadUrl,
+                              (progress) {
+                                setDialogState(() {
+                                  _downloadProgress = progress;
+                                });
+                              },
+                            );
+                            if (mounted) {
+                              Navigator.of(context).pop();
+                            }
+                          },
+                    child: Text(
+                      _isDownloading ? 'Downloading...' : 'Update Now',
+                      style: const TextStyle(color: Colors.blueAccent),
+                    ),
+                  ),
+                ],
+              );
+            }
+          );
+        },
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('You are on the latest version!', style: TextStyle(color: Colors.white)),
+          backgroundColor: Colors.grey.shade900,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +205,24 @@ class SettingsScreen extends StatelessWidget {
                   title: 'Storage & Cache',
                   subtitle: 'Manage saved lyrics and artwork',
                   icon: Icons.storage_rounded,
-                  page: StorageCacheSettingsScreen(service: service),
+                  page: StorageCacheSettingsScreen(service: widget.service),
+                ),
+                _buildActionTile(
+                  context,
+                  title: 'Check for Updates',
+                  subtitle: 'Download the latest features and fixes',
+                  icon: Icons.system_update_rounded,
+                  onTap: _isCheckingForUpdate ? null : _checkForUpdate,
+                  trailing: _isCheckingForUpdate
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
+                          ),
+                        )
+                      : const Icon(Icons.refresh_rounded, color: Colors.white24),
                 ),
                 const SizedBox(height: 40),
                 Center(
@@ -162,6 +305,58 @@ class SettingsScreen extends StatelessWidget {
           ),
         ),
         trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+      ),
+    );
+  }
+
+  Widget _buildActionTile(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback? onTap,
+    Widget? trailing,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: Colors.white70, size: 24),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+            fontWeight: FontWeight(1000),
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            subtitle,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 14,
+              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ),
+        trailing: trailing,
       ),
     );
   }

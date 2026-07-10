@@ -168,12 +168,12 @@ header {
   font-size: 1.125rem;
   text-decoration: none;
   transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-  box-shadow: 0 0 0 rgba(255,255,255,0);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
 }
 
 .btn-primary:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(255,255,255,0.2);
+  box-shadow: 0 12px 30px rgba(43, 220, 114, 0.5);
   background: var(--accent-color);
   color: #000;
 }
@@ -192,21 +192,21 @@ header {
 
 /* Glassmorphism Cards */
 .glass-card {
-  background: var(--surface-color);
-  border: 1px solid var(--surface-border);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 32px;
   padding: 1.5rem;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  transition: transform 0.4s ease, box-shadow 0.4s ease;
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.4s ease, border-color 0.4s ease;
   overflow: hidden;
   position: relative;
 }
 
 .glass-card:hover {
-  transform: translateY(-10px);
-  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-  border-color: rgba(255,255,255,0.2);
+  transform: translateY(-10px) scale(1.02);
+  box-shadow: 0 25px 50px rgba(0,0,0,0.5), 0 0 20px rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .glass-card img {
@@ -230,15 +230,18 @@ header {
 
 .feature-item {
   background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
-  border: 1px solid var(--surface-border);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 24px;
   padding: 2.5rem;
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .feature-item:hover {
+  transform: translateY(-5px) scale(1.02);
   border-color: var(--accent-color);
-  box-shadow: 0 0 30px var(--accent-glow);
+  box-shadow: 0 15px 40px var(--accent-glow);
 }
 
 .feature-item h3 {
@@ -319,3 +322,71 @@ footer a:hover {
     transform: translateY(0);
   }
 }
+
+/* ------------------------------------- */
+/* Mobile Responsiveness                 */
+/* ------------------------------------- */
+@media (max-width: 768px) {
+  /* Typography */
+  h1 {
+    font-size: clamp(2.5rem, 10vw, 3.5rem);
+  }
+  
+  h2 {
+    font-size: clamp(1.8rem, 8vw, 2.2rem);
+  }
+  
+  p {
+    font-size: 1rem;
+  }
+
+  /* Reduce blob size to prevent horizontal scrolling */
+  .blob-1 { width: 300px; height: 300px; top: -5%; }
+  .blob-2 { width: 350px; height: 350px; right: -20%; }
+  .blob-3 { width: 250px; height: 250px; left: 50%; }
+
+  /* Header & Navigation */
+  header {
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 1.5rem 0;
+  }
+  
+  .logo {
+    font-size: 1.25rem;
+  }
+  
+  /* Sections Padding */
+  .hero {
+    padding: 2rem 0 3rem;
+    min-height: 60vh;
+  }
+  
+  .features {
+    padding: 3rem 0;
+  }
+  
+  .showcase {
+    padding: 3rem 0 4rem;
+  }
+  
+  /* Grid gaps and padding */
+  .container {
+    padding: 0 1.5rem;
+  }
+  
+  .grid, .feature-grid {
+    gap: 1.5rem;
+  }
+  
+  .feature-item {
+    padding: 1.75rem;
+  }
+  
+  /* Button sizing */
+  .btn-primary {
+    padding: 0.875rem 1.5rem;
+    font-size: 1rem;
+  }
+}
+

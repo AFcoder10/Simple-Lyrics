@@ -1,8 +1,9 @@
-import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
+import '../widgets/update_dialog.dart';
 
 class UpdateInfo {
   final String version;
@@ -92,9 +93,32 @@ class UpdateService {
       );
 
       // Open the APK to prompt the user to install
-      await OpenFilex.open(savePath);
+      await OpenFilex.open(savePath, type: 'application/vnd.android.package-archive');
     } catch (e) {
       // Silently fail
+    }
+  }
+
+  /// Helper to check and show the dialog
+  static Future<void> checkAndShowUpdate(BuildContext context, {bool silent = false}) async {
+    final updateService = UpdateService();
+    final updateInfo = await updateService.checkForUpdate();
+
+    if (!context.mounted) return;
+
+    if (updateInfo != null) {
+      showDialog(
+        context: context,
+        builder: (context) => UpdateDialog(updateInfo: updateInfo),
+      );
+    } else if (!silent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('You are on the latest version!', style: TextStyle(color: Colors.white)),
+          backgroundColor: Colors.grey.shade900,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 }

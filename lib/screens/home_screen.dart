@@ -7,6 +7,7 @@ import '../services/media_session_service.dart';
 import '../services/lyrics_service.dart';
 import '../services/lyrics_models.dart';
 import '../services/artwork_service.dart';
+import '../services/update_service.dart';
 import '../widgets/now_playing_header.dart';
 import '../widgets/lyrics_view.dart';
 import '../widgets/playback_controls.dart';
@@ -64,7 +65,9 @@ class _HomeScreenState extends State<HomeScreen>
     widget.service.init();
     _subscription = widget.service.mediaStateStream.listen(_onMediaStateUpdate);
     _startHideTimer();
-
+    
+    // Silently check for updates on launch
+    Future.microtask(() => UpdateService.checkAndShowUpdate(context, silent: true));
   }
 
   @override

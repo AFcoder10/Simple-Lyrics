@@ -20,122 +20,18 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isCheckingForUpdate = false;
-  double _downloadProgress = 0.0;
-  bool _isDownloading = false;
 
   Future<void> _checkForUpdate() async {
     setState(() {
       _isCheckingForUpdate = true;
     });
 
-    final updateService = UpdateService();
-    final updateInfo = await updateService.checkForUpdate();
+    await UpdateService.checkAndShowUpdate(context, silent: false);
 
-    setState(() {
-      _isCheckingForUpdate = false;
-    });
-
-    if (!mounted) return;
-
-    if (updateInfo != null) {
-      showDialog(
-        context: context,
-        builder: (context) {
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              return AlertDialog(
-                backgroundColor: const Color(0xFF1E1E1E),
-                title: Text(
-                  'Update Available',
-                  style: TextStyle(
-                    fontFamily: 'Display',
-                    fontFamilyFallback: kGlobalFontFallbacks,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Version ${updateInfo.version} is ready to install.',
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.black26,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        updateInfo.notes.isEmpty ? 'No release notes.' : updateInfo.notes,
-                        style: const TextStyle(color: Colors.white60, fontSize: 13),
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (_isDownloading) ...[
-                      const SizedBox(height: 20),
-                      LinearProgressIndicator(
-                        value: _downloadProgress,
-                        backgroundColor: Colors.white12,
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: Text(
-                          '${(_downloadProgress * 100).toStringAsFixed(1)}%',
-                          style: const TextStyle(color: Colors.white54, fontSize: 12),
-                        ),
-                      ),
-                    ]
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: _isDownloading ? null : () => Navigator.of(context).pop(),
-                    child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
-                  ),
-                  TextButton(
-                    onPressed: _isDownloading
-                        ? null
-                        : () async {
-                            setDialogState(() {
-                              _isDownloading = true;
-                            });
-                            await updateService.downloadAndInstall(
-                              updateInfo.downloadUrl,
-                              (progress) {
-                                setDialogState(() {
-                                  _downloadProgress = progress;
-                                });
-                              },
-                            );
-                            if (mounted) {
-                              Navigator.of(context).pop();
-                            }
-                          },
-                    child: Text(
-                      _isDownloading ? 'Downloading...' : 'Update Now',
-                      style: const TextStyle(color: Colors.blueAccent),
-                    ),
-                  ),
-                ],
-              );
-            }
-          );
-        },
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('You are on the latest version!', style: TextStyle(color: Colors.white)),
-          backgroundColor: Colors.grey.shade900,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    if (mounted) {
+      setState(() {
+        _isCheckingForUpdate = false;
+      });
     }
   }
 

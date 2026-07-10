@@ -1,3 +1,3 @@
-# v1.1.0
-- Added global font fallbacks for universal language support.
+# v1.1.1
+- Auto-update test release!
 - Various UI and performance tweaks.

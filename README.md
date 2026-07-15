@@ -5,7 +5,7 @@
 <h1 align="center">Simple Lyrics</h1>
 
 <p align="center">
-  A minimalist lyrics viewer for Android with real-time synced playback.
+  A beautiful lyrics viewer for Android with real-time synced playback.
 </p>
 
 <p align="center">

@@ -1,3 +1,4 @@
-# v1.1.1
-- Auto-update test release!
-- Various UI and performance tweaks.
+# v1.1.2
+
+* Minor version fixes
+* Font fallbacks added

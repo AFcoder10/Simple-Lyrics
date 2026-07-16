@@ -79,15 +79,21 @@ class UpdateService {
       
       if (dir == null) return;
 
-      // Clean up old APKs in the temp directory before downloading
-      final files = dir.listSync();
-      for (var file in files) {
-        if (file.path.endsWith('.apk')) {
-          try {
-            file.deleteSync();
-          } catch (_) {}
-        }
+      if (!dir.existsSync()) {
+        dir.createSync(recursive: true);
       }
+
+      // Clean up old APKs in the temp directory before downloading
+      try {
+        final files = dir.listSync();
+        for (var file in files) {
+          if (file.path.endsWith('.apk')) {
+            try {
+              file.deleteSync();
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
 
       final savePath = '${dir.path}/Simple-Lyrics-update.apk';
 
@@ -104,7 +110,7 @@ class UpdateService {
       // Open the APK to prompt the user to install
       await OpenFilex.open(savePath, type: 'application/vnd.android.package-archive');
     } catch (e) {
-      // Silently fail
+      debugPrint('Update error: $e');
     }
   }
 

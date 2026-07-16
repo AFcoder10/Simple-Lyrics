@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../services/update_service.dart';
 import '../core/font_fallbacks.dart';
 
@@ -56,10 +57,19 @@ class _UpdateDialogState extends State<UpdateDialog> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: SingleChildScrollView(
-                    child: Text(
-                      widget.updateInfo.notes.isEmpty ? 'No release notes.' : widget.updateInfo.notes,
-                      style: const TextStyle(color: Colors.white60, fontSize: 13),
-                    ),
+                    child: widget.updateInfo.notes.isEmpty 
+                      ? const Text('No release notes.', style: TextStyle(color: Colors.white60, fontSize: 13))
+                      : MarkdownBody(
+                          data: widget.updateInfo.notes,
+                          styleSheet: MarkdownStyleSheet(
+                            p: const TextStyle(fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks, color: Colors.white70, fontSize: 14),
+                            listBullet: const TextStyle(color: Colors.white70),
+                            h1: const TextStyle(fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks, color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                            h2: const TextStyle(fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks, color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                            h3: const TextStyle(fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks, color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                            strong: const TextStyle(fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks, color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
                   ),
                 ),
               ),

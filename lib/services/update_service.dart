@@ -71,8 +71,7 @@ class UpdateService {
     try {
       Directory? dir;
       if (Platform.isAndroid) {
-        final extDirs = await getExternalCacheDirectories();
-        dir = (extDirs != null && extDirs.isNotEmpty) ? extDirs.first : await getTemporaryDirectory();
+        dir = await getExternalStorageDirectory() ?? await getTemporaryDirectory();
       } else {
         dir = await getTemporaryDirectory();
       }
@@ -108,7 +107,8 @@ class UpdateService {
       );
 
       // Open the APK to prompt the user to install
-      await OpenFilex.open(savePath, type: 'application/vnd.android.package-archive');
+      final result = await OpenFilex.open(savePath, type: 'application/vnd.android.package-archive');
+      debugPrint('OpenFilex result: ${result.type} - ${result.message}');
     } catch (e) {
       debugPrint('Update error: $e');
     }

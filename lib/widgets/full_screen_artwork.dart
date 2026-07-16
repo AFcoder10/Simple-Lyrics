@@ -348,10 +348,10 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                   child: Stack(
                     children: [
                       // Normal static artwork background is pure black (or transparent if setting is enabled)
-                      Positioned.fill(
-                        child: Container(color: showBg ? Colors.transparent : Colors.black),
-                      ),
-                      // Dynamic reactive solid color from extreme GPU stretch
+                      // Reactive ambient background:
+                      // Plays the live video scaled up and heavily blurred, providing real-time 
+                      // dynamic color shifts that match the video without any ugly flashing 
+                      // or unnatural pixel stretching.
                       if (isLiveActive)
                         Positioned.fill(
                           child: IgnorePointer(
@@ -374,7 +374,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                                 ),
                                 // Moderate horizontal diffusive blur to prevent severe lag
                                 BackdropFilter(
-                                  filter: ImageFilter.blur(sigmaX: 200, sigmaY: 200),
+                                  filter: ImageFilter.blur(sigmaX: 220, sigmaY: 220),
                                   child: Container(color: Colors.transparent),
                                 ),
                               ],
@@ -519,6 +519,13 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                             key: const ValueKey('live_layout'),
                             child: Stack(
                               children: [
+                                // Global 10% dark tint that covers the entire screen (video + bottom)
+                                // but ONLY exists when Live Artwork is active.
+                                Positioned.fill(
+                                  child: IgnorePointer(
+                                    child: Container(color: Colors.black.withValues(alpha: 0.10)),
+                                  ),
+                                ),
                                 _buildLiveOverlays(metadataFade, controlsFade),
                               ],
                             ),

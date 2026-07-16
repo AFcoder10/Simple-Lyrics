@@ -298,7 +298,7 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
                 // per-artwork before blur so colors stay vibrant.
                 DecoratedBox(
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.06),
+                    color: Colors.black.withValues(alpha: 0.10),
                   ),
                 ),
               ],
@@ -352,20 +352,52 @@ class _ArtworkBackgroundPainter extends CustomPainter {
     final imgW = image.width.toDouble();
     final imgH = image.height.toDouble();
 
-    final baseScale = math.max(size.width / imgW, size.height / imgH);
-    final scale = baseScale * 1.18;
+    // The absolute maximum distance from the center to any screen corner is half the diagonal.
+    // So the diagonal itself is the minimum size the image needs to be to cover the screen at ANY rotation.
+    final screenDiagonal = math.sqrt(size.width * size.width + size.height * size.height);
+    final minImgDim = math.min(imgW, imgH);
+    
+    // The scale required to make the image large enough to cover the entire diagonal
+    final requiredScale = screenDiagonal / minImgDim;
+    
+    // Add 25% extra scale so we have plenty of room to pan around
+    final scale = requiredScale * 1.25;
+    
+    // The surplus physical pixels we have available for panning.
+    // This is the maximum distance the center of the image can move in ANY direction.
+    final maxPan = ((minImgDim * scale) - screenDiagonal) / 2;
+    
+    // Because the image can pan in X and Y SIMULTANEOUSLY (moving diagonally),
+    // the maximum diagonal distance is sqrt(maxX^2 + maxY^2).
+    // To ensure this never exceeds maxPan, we divide by sqrt(2).
+    final safeMaxPan = maxPan / math.sqrt(2);
+    final maxX = safeMaxPan;
+    final maxY = safeMaxPan;
 
-    final maxX = math.max(0.0, (imgW * scale - size.width) / 2);
-    final maxY = math.max(0.0, (imgH * scale - size.height) / 2);
-
-    final twoPi = math.pi * 2;
-    final dx = (math.sin(twoPi * 1 * animation.value) * 0.6 +
-            math.sin(twoPi * 3 * animation.value) * 0.4) *
-        maxX;
-    final dy = (math.cos(twoPi * 2 * animation.value) * 0.55 +
-            math.sin(twoPi * 4 * animation.value) * 0.45) *
-        maxY;
-    final angle = math.sin(twoPi * 1 * animation.value) * 0.07;
+    final time = math.pi * 2 * animation.value;
+    
+    // Create an extremely liquid, pseudo-random path using 5 "octaves" of waves (fractal noise).
+    // The larger, slower waves provide the main sweeping motions, while the higher frequency 
+    // waves add intricate, unpredictable wiggles on top.
+    // The amplitudes (0.35 + 0.25 + 0.20 + 0.12 + 0.08) sum exactly to 1.0.
+    final rawDx = math.sin(time * 1) * 0.35 + 
+                  math.sin(time * 2 + 1.0) * 0.25 + 
+                  math.sin(time * 3 + 2.0) * 0.20 +
+                  math.sin(time * 4 + 3.0) * 0.12 +
+                  math.sin(time * 5 + 4.0) * 0.08;
+                  
+    final rawDy = math.cos(time * 1 + 0.5) * 0.35 + 
+                  math.cos(time * 2 + 1.5) * 0.25 + 
+                  math.cos(time * 3 + 2.5) * 0.20 +
+                  math.cos(time * 4 + 3.5) * 0.12 +
+                  math.cos(time * 5 + 4.5) * 0.08;
+    
+    final dx = rawDx * maxX;
+    final dy = rawDy * maxY;
+    
+    // Full 360-degree rotation, heavily modulated by two overlapping waves for a deeply organic "surge"
+    final angleNoise = math.sin(time * 2) * 0.25 + math.cos(time * 3 + 1.0) * 0.15;
+    final angle = time + angleNoise;
 
     final center = Offset(size.width / 2, size.height / 2);
     // No ImageFilter needed — the image is already pre-blurred.

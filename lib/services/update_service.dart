@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -68,8 +69,16 @@ class UpdateService {
   /// Downloads the APK and triggers the Android package installer.
   Future<void> downloadAndInstall(String url, Function(double) onProgress) async {
     try {
-      final dir = await getTemporaryDirectory();
+      Directory? dir;
+      if (Platform.isAndroid) {
+        final extDirs = await getExternalCacheDirectories();
+        dir = (extDirs != null && extDirs.isNotEmpty) ? extDirs.first : await getTemporaryDirectory();
+      } else {
+        dir = await getTemporaryDirectory();
+      }
       
+      if (dir == null) return;
+
       // Clean up old APKs in the temp directory before downloading
       final files = dir.listSync();
       for (var file in files) {

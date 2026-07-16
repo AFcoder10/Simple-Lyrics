@@ -65,9 +65,12 @@ class _HomeScreenState extends State<HomeScreen>
     widget.service.init();
     _subscription = widget.service.mediaStateStream.listen(_onMediaStateUpdate);
     _startHideTimer();
-    
-    // Silently check for updates on launch
-    Future.microtask(() => UpdateService.checkAndShowUpdate(context, silent: true));
+    // Silently check for updates on launch after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        UpdateService.checkAndShowUpdate(context, silent: true);
+      }
+    });
   }
 
   @override

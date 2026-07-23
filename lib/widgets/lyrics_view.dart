@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:vibration/vibration.dart';
+import '../services/cache_service.dart';
 import '../services/lyrics_models.dart';
 import '../services/media_session_service.dart';
 import 'karaoke_text_fill.dart';
@@ -642,8 +643,8 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                       final isFocused = lineIndex == _focusIndex;
                       final distance = _focusDisplayIndex >= 0 ? (displayIndex - _focusDisplayIndex).abs() : 0;
                       
-                      final blurSigma = (data.timingType != LyricsTimingType.none && _isAutoLocked && !_startupSettling && !_firstScroll && distance > 1) 
-                          ? (distance - 1).toDouble() * 2.5 
+                      final blurSigma = (data.timingType != LyricsTimingType.none && _isAutoLocked && !_startupSettling && !_firstScroll && !isActive) 
+                          ? distance.toDouble() * 2.5 
                           : 0.0;
                       final clampedBlur = blurSigma.clamp(0.0, 8.0);
                         final edgeFade = (_isAutoLocked && !_startupSettling && !_firstScroll)
@@ -725,16 +726,22 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                                       },
                                     );
 
-                                    if (clampedBlur > 0.1) {
-                                      return ImageFiltered(
-                                        imageFilter: ui.ImageFilter.blur(
-                                          sigmaX: clampedBlur,
-                                          sigmaY: clampedBlur,
-                                        ),
-                                        child: innerLine,
-                                      );
-                                    }
-                                    return innerLine;
+                                    return TweenAnimationBuilder<double>(
+                                      tween: Tween<double>(begin: clampedBlur, end: clampedBlur),
+                                      duration: const Duration(milliseconds: 400),
+                                      curve: Curves.easeOutCubic,
+                                      builder: (context, blurValue, child) {
+                                        if (blurValue <= 0.1) return child!;
+                                        return ImageFiltered(
+                                          imageFilter: ui.ImageFilter.blur(
+                                            sigmaX: blurValue,
+                                            sigmaY: blurValue,
+                                          ),
+                                          child: child!,
+                                        );
+                                      },
+                                      child: innerLine,
+                                    );
                                   }),
                                 ),
                               ),

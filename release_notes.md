@@ -1,7 +1,5 @@
-# Simple Lyrics v1.1.4 Update
+# Simple Lyrics v1.1.4
 
-**What's New & Improved:**
-- **Flawless Live Artwork Sync:** Restored the 1,000x pixel-perfect background stretch to guarantee the transition seam flawlessly color-matches the Live Artwork video edge.
-- **Buttery Smooth Ambient Glow:** Upgraded the background blur to sigma 220 and added a 4x horizontal stretch. This completely eliminates ugly "barcode" flashing and produces a unified, ultra-smooth ambient glow that reacts gently to video changes!
-- **Fixed Gesture Blocking:** Tapping and swiping down to exit Live Artwork now works perfectly again (a hidden tint layer was previously blocking touches!).
-- **Rich Markdown Updates:** This very update popup now supports beautiful rich text and Markdown styling, powered by the custom Display font!
+**What's New:**
+- **Dynamic Lyrics Blur:** Inactive lyric lines now softly blur into the background while the currently active line stays perfectly crisp and in focus.
+- **Fluid Transitions:** The blur effect transitions smoothly and naturally as the song plays, giving the player a highly polished, cinematic depth-of-field effect.

@@ -1,5 +1,6 @@
 import 'package:simple_lyrics/core/font_fallbacks.dart';
 import 'package:flutter/material.dart';
+import '../core/settings_route.dart';
 import '../services/media_session_service.dart';
 import '../services/cache_service.dart';
 import '../models/media_state.dart';
@@ -9,13 +10,17 @@ import 'cache_summary_screen.dart';
 class StorageCacheSettingsScreen extends StatelessWidget {
   final MediaSessionService service;
 
-  const StorageCacheSettingsScreen({super.key, required this.service});
+  /// See [AppearanceSettingsScreen.embedded].
+  final bool embedded;
+
+  const StorageCacheSettingsScreen(
+      {super.key, required this.service, this.embedded = false});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
-      appBar: AppBar(
+      appBar: embedded ? null : AppBar(
         backgroundColor: const Color(0xFF0A0A0A),
         elevation: 0,
         title: const Text(
@@ -36,13 +41,7 @@ class StorageCacheSettingsScreen extends StatelessWidget {
             icon: Icons.folder_open_rounded,
             onTap: () {
               Navigator.of(context).push(
-                PageRouteBuilder(
-                  pageBuilder: (context, animation, secondaryAnimation) => CacheScreen(service: service),
-                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  transitionDuration: const Duration(milliseconds: 300),
-                ),
+                buildSettingsRoute(CacheScreen(service: service)),
               );
             },
           ),
@@ -58,13 +57,7 @@ class StorageCacheSettingsScreen extends StatelessWidget {
                 icon: Icons.bar_chart_rounded,
                 onTap: () {
                   Navigator.of(context).push(
-                    PageRouteBuilder(
-                      pageBuilder: (context, animation, secondaryAnimation) => const CacheSummaryScreen(),
-                      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                        return FadeTransition(opacity: animation, child: child);
-                      },
-                      transitionDuration: const Duration(milliseconds: 300),
-                    ),
+                    buildSettingsRoute(const CacheSummaryScreen()),
                   );
                 },
                 enabled: true,

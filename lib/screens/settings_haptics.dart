@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
 
 class HapticSettingsScreen extends StatelessWidget {
-  const HapticSettingsScreen({super.key});
+  /// See [AppearanceSettingsScreen.embedded].
+  final bool embedded;
+
+  const HapticSettingsScreen({super.key, this.embedded = false});
 
   @override
   Widget build(BuildContext context) {
@@ -11,7 +14,7 @@ class HapticSettingsScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
-      appBar: AppBar(
+      appBar: embedded ? null : AppBar(
         backgroundColor: const Color(0xFF0A0A0A),
         elevation: 0,
         title: const Text(

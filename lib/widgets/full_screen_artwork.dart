@@ -45,6 +45,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
   // State variables for delayed dark overlay when live artwork is active
   bool _showLiveOverlayDarkFade = false;
   Timer? _liveOverlayDelayTimer;
+  Timer? _immersiveTimer;
   bool _lastIsLiveActive = false;
 
 
@@ -72,8 +73,13 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
       _startLiveOverlayDelayTimer();
     }
 
-    // Hide status bar and navigation bar for fullscreen immersion
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+    // Defer hiding system bars until after the 550ms Hero entry flight so
+    // Android does not trigger a window inset resize & relayout mid-flight.
+    _immersiveTimer = Timer(const Duration(milliseconds: 560), () {
+      if (mounted) {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+      }
+    });
   }
 
   void _onMediaStateUpdate(MediaState state) {
@@ -129,6 +135,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
   void dispose() {
     SettingsService().animatedArtworkEnabled.removeListener(_onSettingsChanged);
     _liveOverlayDelayTimer?.cancel();
+    _immersiveTimer?.cancel();
     _positionTicker.dispose();
     _entryController.dispose();
     _subscription?.cancel();
@@ -234,21 +241,6 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
 
     return PopScope(
       canPop: true,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) {
-          SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-          SystemChrome.setSystemUIOverlayStyle(
-            const SystemUiOverlayStyle(
-              statusBarColor: Colors.transparent,
-              statusBarIconBrightness: Brightness.light,
-              systemNavigationBarColor: Colors.transparent,
-              systemNavigationBarIconBrightness: Brightness.light,
-              systemNavigationBarDividerColor: Colors.transparent,
-              systemNavigationBarContrastEnforced: false,
-            ),
-          );
-        }
-      },
       child: ValueListenableBuilder<bool>(
         valueListenable: SettingsService().showBackgroundInFullScreenArtwork,
         builder: (context, showBg, _) {
@@ -291,7 +283,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                     ),
                   );
 
-            Widget _buildTallPlaceholder(Widget staticPlaceholder) {
+            Widget buildTallPlaceholder(Widget staticPlaceholder) {
               if (showBg) {
                 // If the user wants the background to show, don't block it with an opaque blurred placeholder
                 return const SizedBox.expand();
@@ -300,16 +292,27 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                   ? RepaintBoundary(
                       child: ClipRect(
                         child: Transform.scale(
-                          scale: 1.15,
+                          scale: 1.18,
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              staticPlaceholder,
-                              BackdropFilter(
-                                filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
-                                child: Container(
-                                  color: Colors.black.withValues(alpha: 0.3),
+                              ImageFiltered(
+                                imageFilter: ImageFilter.blur(
+                                  sigmaX: 28,
+                                  sigmaY: 28,
+                                  tileMode: TileMode.clamp,
                                 ),
+                                child: Image.memory(
+                                  art,
+                                  fit: BoxFit.cover,
+                                  cacheWidth: 64,
+                                  cacheHeight: 64,
+                                  filterQuality: FilterQuality.low,
+                                  gaplessPlayback: true,
+                                ),
+                              ),
+                              Container(
+                                color: Colors.black.withValues(alpha: 0.30),
                               ),
                             ],
                           ),
@@ -330,7 +333,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                       gaplessPlayback: true,
                     ),
                   )
-                : _buildTallPlaceholder(staticPlaceholder);
+                : buildTallPlaceholder(staticPlaceholder);
 
             final minSpace = 160.0;
             final screenWidth = MediaQuery.of(context).size.width;
@@ -349,35 +352,43 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
                     children: [
                       // Normal static artwork background is pure black (or transparent if setting is enabled)
                       // Reactive ambient background:
-                      // Plays the live video scaled up and heavily blurred, providing real-time 
-                      // dynamic color shifts that match the video without any ugly flashing 
-                      // or unnatural pixel stretching.
+                      // Only blurs the visible lower region below the 3:4 video so
+                      // the GPU isn't blurring hidden pixels or running sigma 220
+                      // across the whole screen during expand/compact.
                       if (isLiveActive)
-                        Positioned.fill(
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          top: (liveVideoHeight - 140).clamp(0.0, screenHeight),
+                          bottom: 0,
                           child: IgnorePointer(
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                ClipRect(
-                                  child: Transform.scale(
-                                    scaleX: 1.0, 
-                                    scaleY: 1000.0, // Stretch vertically to fill screen
-                                    alignment: Alignment.bottomCenter,
-                                    child: AnimatedArtworkPlayer(
-                                      url: _mediaState.tallMasterUrl!,
-                                      placeholder: staticPlaceholder,
-                                      fit: BoxFit.fitWidth,
+                            child: RepaintBoundary(
+                              child: ClipRect(
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    Transform.scale(
+                                      scaleX: 1.0,
+                                      scaleY: 1000.0,
                                       alignment: Alignment.bottomCenter,
-                                      enableCrossFade: false,
+                                      child: AnimatedArtworkPlayer(
+                                        url: _mediaState.tallMasterUrl!,
+                                        placeholder: staticPlaceholder,
+                                        fit: BoxFit.fitWidth,
+                                        alignment: Alignment.bottomCenter,
+                                        enableCrossFade: false,
+                                      ),
                                     ),
-                                  ),
+                                    BackdropFilter(
+                                      filter: ImageFilter.blur(
+                                        sigmaX: 40,
+                                        sigmaY: 20,
+                                      ),
+                                      child: const SizedBox.expand(),
+                                    ),
+                                  ],
                                 ),
-                                // Moderate horizontal diffusive blur to prevent severe lag
-                                BackdropFilter(
-                                  filter: ImageFilter.blur(sigmaX: 220, sigmaY: 220),
-                                  child: Container(color: Colors.transparent),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                         ),

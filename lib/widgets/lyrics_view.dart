@@ -1,10 +1,12 @@
 import 'package:simple_lyrics/core/font_fallbacks.dart';
+import 'package:simple_lyrics/core/platform_capabilities.dart';
 import 'dart:ui' as ui;
 import 'dart:async';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/material.dart' as material show Text;
+import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
@@ -41,8 +43,10 @@ class LyricsView extends StatefulWidget {
   State<LyricsView> createState() => LyricsViewState();
 }
 
-class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMixin {
+class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
+  late final AnimationController _autoScrollController;
+  late final _LyricsWaveController _waveController;
 
   List<int> _activeIndices = [];
   int _focusIndex = -1;
@@ -58,6 +62,7 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
   bool _startupSettling = false;
   bool _userIsTouching = false;
   bool _waitingForNewTrackLyrics = false;
+  Timer? _trackWaitTimer;
   int _searchAttempts = 0; // NEW: Track search jumps
   
   // Seek indicator state
@@ -85,8 +90,15 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
     super.initState();
     widget.positionNotifier.addListener(_onPositionChanged);
     _applyPosition(widget.positionNotifier.value, widget.duration);
-    
-    SemanticsBinding.instance.ensureSemantics();
+
+    _autoScrollController = AnimationController.unbounded(vsync: this)
+      ..addListener(_onAutoScrollTick);
+
+    _waveController = _LyricsWaveController(
+      scrollController: _scrollController,
+      vsync: this,
+    );
+    _syncWaveEnabled();
 
     _initParallax();
 
@@ -96,13 +108,15 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
   }
 
   void _initParallax() {
-    // Ticker runs every frame (60fps to 120fps depending on device)
+    // Ticker runs only while parallax is enabled so disabled devices spend
+    // zero per-frame callbacks on tilt interpolation.
     _ticker = createTicker((elapsed) {
       if (!SettingsService().parallaxEnabled.value) {
         if (_roll != 0 || _pitch != 0) {
           _roll = 0; _pitch = 0; _targetRoll = 0; _targetPitch = 0;
           _parallaxTransform.value = Matrix4.identity();
         }
+        _ticker.stop();
         return;
       }
 
@@ -122,14 +136,33 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
         ..rotateX(-_pitch * 0.18) // Natural tilt
         ..rotateY(_roll * 0.18);
     });
-    _ticker.start();
+    SettingsService().parallaxEnabled.addListener(_onParallaxSettingChanged);
+    if (SettingsService().parallaxEnabled.value) {
+      _ticker.start();
+    }
 
-    _gyroSubscription = gyroscopeEventStream().listen((event) {
-      if (!mounted || !SettingsService().parallaxEnabled.value) return;
-      // Set the target, ticker handles the smooth transition
-      _targetRoll = event.y;
-      _targetPitch = event.x;
-    });
+    _gyroSubscription = supportsTiltSensors
+        ? gyroscopeEventStream().listen((event) {
+            if (!mounted || !SettingsService().parallaxEnabled.value) return;
+            // Set the target, ticker handles the smooth transition
+            _targetRoll = event.y;
+            _targetPitch = event.x;
+          })
+        : null;
+  }
+
+  void _onParallaxSettingChanged() {
+    if (!mounted) return;
+    if (SettingsService().parallaxEnabled.value) {
+      if (!_ticker.isActive) _ticker.start();
+    } else {
+      _roll = 0;
+      _pitch = 0;
+      _targetRoll = 0;
+      _targetPitch = 0;
+      _parallaxTransform.value = Matrix4.identity();
+      if (_ticker.isActive) _ticker.stop();
+    }
   }
 
   @override
@@ -149,19 +182,39 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
         _activeIndices = [];
         _focusIndex = -1;
         _focusDisplayIndex = -1;
-        _smoothSeconds.value = widget.positionNotifier.value.inMilliseconds / 1000.0;
+
+        // Safety net: if new lyrics never arrive (cached track, API miss, a
+        // track change that doesn't produce new data), the wait must end
+        // anyway. Otherwise focus and scrolling stay frozen for the rest of
+        // the session.
+        _trackWaitTimer?.cancel();
+        _trackWaitTimer = Timer(const Duration(milliseconds: 800), () {
+          if (mounted && _waitingForNewTrackLyrics) {
+            _waitingForNewTrackLyrics = false;
+            _queueStartupFocusJump();
+          }
+        });
+
+        _smoothSeconds.value = widget.positionNotifier.value.inMicroseconds / 1e6;
         _firstScroll = true;
         _startupSettling = true;
         _isAutoLocked = true;
         _scrollQueued = false;
         _pendingScrollToTop = false;
         _searchAttempts = 0;
+        _autoScrollController.stop();
+        _autoScrollController.value = 0.0;
+        _waveController.reset();
+        _syncWaveEnabled();
         
         if (_scrollController.hasClients) {
           _scrollController.jumpTo(0.0);
         }
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && _scrollController.hasClients) {
+            _autoScrollController.stop();
+            _autoScrollController.value = 0.0;
+            _waveController.reset();
             _scrollController.jumpTo(0.0);
           }
         });
@@ -177,6 +230,7 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
 
       if (lyricsChanged) {
         _waitingForNewTrackLyrics = false;
+        _trackWaitTimer?.cancel();
         _queueStartupFocusJump();
       }
     }
@@ -189,7 +243,6 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
   }
 
   void _onPositionChanged() {
-    if (_waitingForNewTrackLyrics) return;
     _applyPosition(widget.positionNotifier.value, widget.duration);
   }
 
@@ -198,6 +251,8 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
     _startupSettling = true;
     _isAutoLocked = true;
     _searchAttempts = 0;
+    _waveController.reset();
+    _syncWaveEnabled();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -212,14 +267,53 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
       _isAutoLocked = true;
       _firstScroll = true; // Force jump instead of smooth animate for immediate response
     });
+    _autoScrollController.stop();
+    _waveController.reset();
+    _syncWaveEnabled();
     _calculateFocus(_smoothSeconds.value);
     _scrollToFocusLine();
   }
 
+  void _onAutoScrollTick() {
+    if (!mounted ||
+        !_isAutoLocked ||
+        _userIsTouching ||
+        _pendingScrollToTop ||
+        !_scrollController.hasClients) {
+      if (_autoScrollController.isAnimating) {
+        _autoScrollController.stop();
+      }
+      return;
+    }
+    final pos = _scrollController.position;
+    final clamped = _autoScrollController.value.clamp(
+      pos.minScrollExtent,
+      pos.maxScrollExtent,
+    );
+    _scrollController.jumpTo(clamped);
+  }
+
+  void _syncWaveEnabled() {
+    _waveController.setEnabled(
+      _isAutoLocked &&
+          !_userIsTouching &&
+          !_firstScroll &&
+          !_startupSettling &&
+          !_pendingScrollToTop &&
+          (widget.lyricsData?.timingType ?? LyricsTimingType.none) !=
+              LyricsTimingType.none,
+    );
+  }
+
   @override
   void dispose() {
+    SettingsService().parallaxEnabled.removeListener(_onParallaxSettingChanged);
     widget.positionNotifier.removeListener(_onPositionChanged);
+    _autoScrollController.dispose();
+    _waveController.dispose();
     _ticker.dispose();
+    _trackWaitTimer?.cancel();
+    _seekIndicatorTimer?.cancel();
     _gyroSubscription?.cancel();
     _smoothSeconds.dispose();
     _parallaxTransform.dispose();
@@ -230,15 +324,23 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
   void _applyPosition(Duration position, Duration duration) {
     if (!mounted) return;
 
-    final sec = position.inMilliseconds / 1000.0;
+    final sec = position.inMicroseconds / 1e6;
+
+    // Always publish the playback time first. Every karaoke fill, word lift and
+    // "lit" state reads _smoothSeconds, so anything below that returns early
+    // used to freeze the animation outright — including the end-of-song branch
+    // and the track-change wait flag.
+    _smoothSeconds.value = sec;
 
     // If the song is essentially over, scroll lyrics view to the top
     if (duration.inMilliseconds > 0) {
-      final durationSec = duration.inMilliseconds / 1000.0;
+      final durationSec = duration.inMicroseconds / 1e6;
       // within 250ms of end -> treat as finished
       if (sec >= durationSec - 0.25) {
         if (!_pendingScrollToTop) {
           _pendingScrollToTop = true;
+          _autoScrollController.stop();
+          _syncWaveEnabled();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             if (_scrollController.hasClients) {
@@ -260,6 +362,8 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
             _firstScroll = true;
             _isAutoLocked = true;
             _pendingScrollToTop = false;
+            _waveController.reset();
+            _syncWaveEnabled();
             if (mounted) setState(() {});
           });
         }
@@ -268,9 +372,12 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
     }
 
     final data = widget.lyricsData;
-    _smoothSeconds.value = sec;
-
     if (data == null || data.isEmpty) return;
+
+    // Deferring only focus and scrolling is safe; the highlight clock above
+    // has already been kept in step.
+    if (_waitingForNewTrackLyrics) return;
+
     _calculateFocus(_smoothSeconds.value);
   }
 
@@ -278,7 +385,9 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
     final data = widget.lyricsData;
     if (data == null || data.isEmpty) return;
 
-    final newIndices = data.activeLineIndices(Duration(milliseconds: (sec * 1000).toInt()));
+    final newIndices = data.activeLineIndices(
+      Duration(microseconds: (sec * 1e6).round()),
+    );
 
     int newFocus = -1;
     for (int i = 0; i < data.lines.length; i++) {
@@ -312,7 +421,7 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
             final intensity = (255 * curve).toInt().clamp(0, 255);
             
             // Only vibrate if intensity is above a negligible threshold
-            if (intensity > 10) {
+            if (intensity > 10 && supportsHaptics) {
               Vibration.vibrate(duration: 48, amplitude: intensity);
             }
             
@@ -394,6 +503,7 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
       if (!_isAutoLocked) {
         HapticFeedback.lightImpact();
         setState(() => _isAutoLocked = true);
+        _syncWaveEnabled();
       }
     }
   }
@@ -444,6 +554,9 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
         final estimatedOffset = maxExtent * progress;
         final targetOffset = estimatedOffset.clamp(0.0, maxExtent);
         
+        _autoScrollController.stop();
+        _autoScrollController.value = targetOffset;
+        _waveController.reset();
         _scrollController.jumpTo(targetOffset);
         
         // Retry after next frame to find the actual render object
@@ -471,18 +584,36 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
       _firstScroll = false;
       _isAutoLocked = true;
       _startupSettling = false;
+      _autoScrollController.stop();
+      _autoScrollController.value = clampedOffset;
+      _waveController.reset();
       _scrollController.jumpTo(clampedOffset);
+      _syncWaveEnabled();
       return;
     }
 
-    final distance = (_scrollController.offset - clampedOffset).abs();
+    final currentOffset = _scrollController.offset;
+    final distance = (currentOffset - clampedOffset).abs();
     if (distance < 1.0) return;
-    final durationMs = (distance * 3.5).clamp(700.0, 1600.0).toInt();
 
-    _scrollController.animateTo(
-      clampedOffset,
-      duration: Duration(milliseconds: durationMs),
-      curve: Curves.easeOutQuart,
+    // Weighty, inertial spring simulation that carries velocity across rapid
+    // line changes like Apple Music lyrics instead of restarting from 0 speed.
+    final currentVelocity = _autoScrollController.isAnimating
+        ? _autoScrollController.velocity
+        : 0.0;
+    _autoScrollController.value = currentOffset;
+    const scrollSpring = SpringDescription(
+      mass: 1.25,
+      stiffness: 46.0,
+      damping: 14.8,
+    );
+    _autoScrollController.animateWith(
+      SpringSimulation(
+        scrollSpring,
+        currentOffset,
+        clampedOffset,
+        currentVelocity,
+      ),
     );
   }
 
@@ -506,14 +637,25 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
     }
 
     return Listener(
-      onPointerDown: (_) => _userIsTouching = true,
-      onPointerUp: (_) => _userIsTouching = false,
-      onPointerCancel: (_) => _userIsTouching = false,
+      onPointerDown: (_) {
+        _userIsTouching = true;
+        _autoScrollController.stop();
+        _syncWaveEnabled();
+      },
+      onPointerUp: (_) {
+        _userIsTouching = false;
+        _syncWaveEnabled();
+      },
+      onPointerCancel: (_) {
+        _userIsTouching = false;
+        _syncWaveEnabled();
+      },
       child: NotificationListener<ScrollNotification>(
         onNotification: (notification) {
           if (notification is ScrollUpdateNotification) {
             if (_userIsTouching && notification.dragDetails != null && _isAutoLocked) {
               setState(() => _isAutoLocked = false);
+              _syncWaveEnabled();
             }
             if (!_isAutoLocked && notification.dragDetails != null) {
               _checkIfUserScrolledIntoRange();
@@ -526,8 +668,13 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
               // Find which line is closest to the focus center
               if (widget.lyricsData != null) {
                 // This is a simplified estimation for performance
-                final approxIndex = (_displayItems.length * (centerOffset / _scrollController.position.maxScrollExtent)).toInt();
-                currentlyHoveredLine = approxIndex.clamp(0, _displayItems.length - 1);
+                final maxExtent = _scrollController.position.maxScrollExtent;
+                if (maxExtent > 0) {
+                  final approxIndex = (_displayItems.length * (centerOffset / maxExtent)).toInt();
+                  currentlyHoveredLine = approxIndex.clamp(0, _displayItems.length - 1);
+                } else {
+                  currentlyHoveredLine = 0;
+                }
               }
 
               if (currentlyHoveredLine != _lastHoveredLine && currentlyHoveredLine != -1) {
@@ -575,7 +722,9 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
             },
             child: CustomScrollView(
               controller: _scrollController,
-              physics: const BouncingScrollPhysics(),
+              physics: const CinematicScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
               slivers: [
                 if (data.timingType == LyricsTimingType.none && data.songwriters.isNotEmpty)
                   SliverToBoxAdapter(
@@ -628,11 +777,23 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                         }
                         return KeyedSubtree(
                           key: _lineKeys[displayIndex],
-                          child: _InterludeDots(
-                            smoothSeconds: _smoothSeconds,
-                            gapStart: _interludeStarts[interludeIdx],
-                            gapEnd: _interludeEnds[interludeIdx],
-                            service: widget.service,
+                          child: RepaintBoundary(
+                            child: _DominoWaveItem(
+                              controller: _waveController,
+                              displayIndex: displayIndex,
+                              focusDisplayIndex: _focusDisplayIndex,
+                              enabled: data.timingType != LyricsTimingType.none &&
+                                  !_startupSettling &&
+                                  !_firstScroll,
+                              child: RepaintBoundary(
+                                child: _InterludeDots(
+                                  smoothSeconds: _smoothSeconds,
+                                  gapStart: _interludeStarts[interludeIdx],
+                                  gapEnd: _interludeEnds[interludeIdx],
+                                  service: widget.service,
+                                ),
+                              ),
+                            ),
                           ),
                         );
                       }
@@ -654,7 +815,16 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                       Widget buildLine(bool lit) {
                         return KeyedSubtree(
                           key: _lineKeys[displayIndex],
-                          child: GestureDetector(
+                          child: RepaintBoundary(
+                            child: _DominoWaveItem(
+                              controller: _waveController,
+                              displayIndex: displayIndex,
+                              focusDisplayIndex: _focusDisplayIndex,
+                              enabled: data.timingType != LyricsTimingType.none &&
+                                  !_startupSettling &&
+                                  !_firstScroll,
+                              child: RepaintBoundary(
+                                child: GestureDetector(
                             onTap: () {
                               if (data.timingType == LyricsTimingType.none) return;
                               
@@ -670,7 +840,7 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                               curve: Curves.easeOutCubic,
                               // LINE IS LIT if it is either Active (animating)
                               // If it is lit, it is ALWAYS fully visible, ignoring edgeFade distance.
-                              opacity: lit ? 1.0 : (0.2 * edgeFade),
+                              opacity: lit ? 1.0 : (0.28 * edgeFade),
                               child: AnimatedScale(
                                 scale: (!_startupSettling && isFocused && !line.isBackground) ? 1.035 : 1.0,
                                 alignment: line.alignment == LyricsLineAlignment.right
@@ -707,10 +877,15 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                                         // If romanized text is being used, we check if word-level transliterations exist.
                                         // If the line has word timing, we animate it word-by-word.
                                         if (line.hasWordTiming && isActive) {
-                                          return _ActiveWordLine(
-                                            line: line,
-                                            smoothSeconds: _smoothSeconds,
-                                            romanize: romanize,
+                                          // This is the line that rebuilds and repaints every frame, so it is
+                                          // the one that needs the boundary — otherwise its layer is merged with
+                                          // the ancestors (blur, background) and drags them into every repaint.
+                                          return RepaintBoundary(
+                                            child: _ActiveWordLine(
+                                              line: line,
+                                              smoothSeconds: _smoothSeconds,
+                                              romanize: romanize,
+                                            ),
                                           );
                                         } else {
                                           return RepaintBoundary(
@@ -747,20 +922,23 @@ class LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMi
                               ),
                             ),
                           ),
-                        );
-                      }
+                        ),
+                      ),
+                    ),
+                  );
+                }
 
-                      return ValueListenableBuilder<double>(
-                        valueListenable: _smoothSeconds,
-                        builder: (context, lineSeconds, _) {
-                          final isStarted = lineSeconds >= line.startTime;
-                          final isEnded = lineSeconds > line.endTime;
-                          // ONLY lit if the line has actually started and not yet ended.
-                          // It will NO LONGER lit up early just because it is in focus.
-                           // For untimed lyrics, keep all lines "lit up" at full opacity
-                           final lit = (data.timingType == LyricsTimingType.none) ? true : (isStarted && !isEnded);
-                           return buildLine(lit);
-                        },
+                      // The position notifier ticks every frame while playing,
+                      // but a line's lit state only changes twice: when it
+                      // starts and when it ends. Handing every visible line a
+                      // fresh rebuild each frame just to recompute that boolean
+                      // is wasted work — see [_LitLine].
+                      return _LitLine(
+                        position: _smoothSeconds,
+                        timingType: data.timingType,
+                        startTime: line.startTime,
+                        endTime: line.endTime,
+                        builder: buildLine,
                       );
                     },
                     childCount: _displayItems.length,
@@ -872,25 +1050,144 @@ class _ActiveWordLine extends StatefulWidget {
   State<_ActiveWordLine> createState() => _ActiveWordLineState();
 }
 
+class _WordSyllableGroup {
+  final String text;
+  final double startTime;
+  final double endTime;
+  final List<({double startTime, double endTime, double weight})> syllables;
+
+  const _WordSyllableGroup({
+    required this.text,
+    required this.startTime,
+    required this.endTime,
+    required this.syllables,
+  });
+
+  double progressAt(double sec) {
+    if (sec >= endTime) return 1.0;
+    if (sec <= startTime) return 0.0;
+
+    if (syllables.length == 1) {
+      final dur = endTime - startTime;
+      return dur > 0.01 ? ((sec - startTime) / dur).clamp(0.0, 1.0) : 1.0;
+    }
+
+    double total = 0.0;
+    for (final s in syllables) {
+      if (sec >= s.endTime) {
+        total += s.weight;
+      } else if (sec > s.startTime) {
+        final dur = s.endTime - s.startTime;
+        final p = dur > 0.01 ? ((sec - s.startTime) / dur).clamp(0.0, 1.0) : 1.0;
+        total += s.weight * p;
+      }
+    }
+    return total.clamp(0.0, 1.0);
+  }
+}
+
 class _ActiveWordLineState extends State<_ActiveWordLine> {
   int _lastVibratedWordIndex = -1;
   bool _isWordVibrating = false;
+  int _windowState = -2;
+  double _renderedSec = 0.0;
+  late List<_WordSyllableGroup> _wordGroups;
+
+  double get _windowStart => widget.line.startTime - 0.12;
+
+  double get _windowEnd {
+    final lastWordLiftEnd = _wordGroups.isNotEmpty
+        ? _wordGroups.last.startTime + KaraokeTextFill.liftSpanSeconds + 0.70
+        : widget.line.endTime + 0.5;
+    final lineTailEnd = widget.line.endTime + 0.5;
+    return lineTailEnd > lastWordLiftEnd ? lineTailEnd : lastWordLiftEnd;
+  }
+
+  int _computeWindowState(double sec) {
+    if (sec < _windowStart) return -1;
+    if (sec <= _windowEnd) return 0;
+    return 1;
+  }
+
+  List<_WordSyllableGroup> _buildWordGroups() {
+    final useTranslit = widget.romanize &&
+        widget.line.transliteratedWords != null &&
+        widget.line.transliteratedWords!.isNotEmpty;
+    final source =
+        useTranslit ? widget.line.transliteratedWords! : widget.line.words;
+    if (source.isEmpty) return const [];
+
+    String wordText(LyricsWord w) =>
+        (widget.romanize && w.transliteratedText != null)
+            ? w.transliteratedText!
+            : w.text;
+
+    final groups = <_WordSyllableGroup>[];
+    final current = <LyricsWord>[];
+
+    void flushGroup() {
+      if (current.isEmpty) return;
+      final texts = current.map(wordText).toList();
+      final fullText = texts.join();
+      final trimmedLengths =
+          texts.map((t) => t.trimRight().length.clamp(1, 999)).toList();
+      final totalChars = trimmedLengths.fold<int>(0, (a, b) => a + b);
+
+      final syllables = <({double startTime, double endTime, double weight})>[
+        for (int i = 0; i < current.length; i++)
+          (
+            startTime: current[i].startTime,
+            endTime: current[i].endTime,
+            weight: totalChars > 0 ? trimmedLengths[i] / totalChars : 1.0 / current.length,
+          ),
+      ];
+
+      groups.add(
+        _WordSyllableGroup(
+          text: fullText,
+          startTime: current.first.startTime,
+          endTime: current.last.endTime,
+          syllables: syllables,
+        ),
+      );
+      current.clear();
+    }
+
+    for (final w in source) {
+      final t = wordText(w);
+      current.add(w);
+      // Only merge consecutive syllable spans that have no trailing whitespace.
+      if (t != t.trimRight()) {
+        flushGroup();
+      }
+    }
+    flushGroup();
+    return groups;
+  }
 
   @override
   void initState() {
     super.initState();
+    _wordGroups = _buildWordGroups();
+    _renderedSec = widget.smoothSeconds.value;
+    _windowState = _computeWindowState(_renderedSec);
     widget.smoothSeconds.addListener(_handleSecondsChange);
   }
 
   @override
   void didUpdateWidget(_ActiveWordLine oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.line != widget.line) {
+    if (oldWidget.line != widget.line || oldWidget.romanize != widget.romanize) {
       _lastVibratedWordIndex = -1;
+      _wordGroups = _buildWordGroups();
+      _renderedSec = widget.smoothSeconds.value;
+      _windowState = _computeWindowState(_renderedSec);
     }
     if (oldWidget.smoothSeconds != widget.smoothSeconds) {
       oldWidget.smoothSeconds.removeListener(_handleSecondsChange);
       widget.smoothSeconds.addListener(_handleSecondsChange);
+      _renderedSec = widget.smoothSeconds.value;
+      _windowState = _computeWindowState(_renderedSec);
     }
   }
 
@@ -902,10 +1199,19 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
 
   void _handleSecondsChange() {
     if (!mounted) return;
+    final sec = widget.smoothSeconds.value;
+    final nextState = _computeWindowState(sec);
+
+    if (nextState == 0 || nextState != _windowState) {
+      setState(() {
+        _windowState = nextState;
+        _renderedSec = sec;
+      });
+    }
+
     final settings = SettingsService();
     if (!settings.hapticLyricsEnabled.value || !settings.wordToWordHapticsEnabled.value) return;
 
-    final sec = widget.smoothSeconds.value;
     int activeIdx = -1;
     for (int i = 0; i < widget.line.words.length; i++) {
       if (sec >= widget.line.words[i].startTime && sec < widget.line.words[i].endTime) {
@@ -921,6 +1227,8 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
   }
 
   Future<void> _triggerWordHaptic(LyricsWord word) async {
+    if (!supportsHaptics) return;
+
     if (_isWordVibrating) {
       Vibration.cancel();
     }
@@ -986,50 +1294,48 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
         final effectiveFontSize = widget.line.isBackground ? fontSize * 0.8 : fontSize;
 
         Widget buildWrap(double lineSeconds) {
+          // Each word creeps up over a fixed span and then stays there —
+          // sung words sit above the line, unsung words stay on the baseline.
+          // The span is deliberately much longer than a single word: the lift
+          // keeps resolving across the words that follow, which is what gives
+          // the slow drift rather than a per-word pop. Letter-by-letter runs
+          // take the same rule inside KaraokeTextFill and apply it per letter.
+          const liftDistance = KaraokeTextFill.liftDistance;
+          const liftSpanSeconds = KaraokeTextFill.liftSpanSeconds;
+
           return Wrap(
             alignment: widget.line.alignment == LyricsLineAlignment.right
                 ? WrapAlignment.end
                 : WrapAlignment.start,
+            crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 0,
             runSpacing: 4,
-            children: (widget.romanize && widget.line.transliteratedWords != null && widget.line.transliteratedWords!.isNotEmpty
-                    ? widget.line.transliteratedWords!
-                    : widget.line.words)
-                .map((word) {
-              final dur = word.endTime - word.startTime;
-              double progress;
-              
-              if (lineSeconds >= word.endTime) {
-                progress = 1.0;
-              } else if (lineSeconds >= word.startTime) {
-                progress = dur > 0.01 ? (lineSeconds - word.startTime) / dur : 1.0;
-              } else {
-                progress = 0.0;
-              }
+            children: _wordGroups.map((group) {
+              final dur = group.endTime - group.startTime;
+              final progress = group.progressAt(lineSeconds);
 
               final isLongHold = dur >= 1.0;
-              final liftProgress = ((lineSeconds - word.startTime) /
-                      (isLongHold ? 3.2 : 2.7))
-                  .clamp(0.0, 1.0);
-              final liftOffset = -4.0 *
+              final liftProgress =
+                  ((lineSeconds - group.startTime) / liftSpanSeconds)
+                      .clamp(0.0, 1.0);
+              final liftOffset = -liftDistance *
                   (isLongHold ? Curves.easeInOutCubic : Curves.easeOutCubic)
                       .transform(liftProgress);
 
-              return Transform.translate(
-                offset: Offset(0, liftOffset),
-                child: KaraokeTextFill(
-                  text: widget.romanize && word.transliteratedText != null ? word.transliteratedText! : word.text,
-                  progress: progress.clamp(0.0, 1.0),
-                  longHold: isLongHold,
-                  elapsedSeconds: lineSeconds - word.startTime,
-                  wordDuration: dur,
-                  style: TextStyle(
-                    fontFamily: hasComplexScript(word.text) ? 'Roboto' : 'Heavy',
-                    fontFamilyFallback: hasComplexScript(word.text) ? null : kGlobalFontFallbacks,
-                    fontSize: effectiveFontSize,
-                    fontWeight: FontWeight(1000),
-                    letterSpacing: -0.6,
-                  ),
+              return KaraokeTextFill(
+                text: group.text,
+                progress: progress,
+                longHold: isLongHold,
+                elapsedSeconds: lineSeconds - group.startTime,
+                wordDuration: dur,
+                liftOffset: liftOffset,
+                style: TextStyle(
+                  fontFamily: hasComplexScript(group.text) ? 'Roboto' : 'Heavy',
+                  fontFamilyFallback:
+                      hasComplexScript(group.text) ? null : kGlobalFontFallbacks,
+                  fontSize: effectiveFontSize,
+                  fontWeight: FontWeight(1000),
+                  letterSpacing: -0.6,
                 ),
               );
             }).toList(),
@@ -1043,15 +1349,91 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
           ),
           child: Align(
             alignment: alignment,
-            child: ValueListenableBuilder<double>(
-              valueListenable: widget.smoothSeconds,
-              builder: (context, lineSeconds, _) => buildWrap(lineSeconds),
-            ),
+            child: buildWrap(_renderedSec),
           ),
         );
       },
     );
   }
+}
+
+/// Rebuilds a lyric line only when its lit state actually flips.
+///
+/// [LyricsView] drives everything from a position notifier that ticks every
+/// frame while playing, but a line is lit from the moment it starts until the
+/// moment it ends — two transitions for the whole song. Rebuilding every
+/// visible line on every tick recomputed nothing but a boolean comparison, so
+/// this listener does the comparison itself and only asks for a rebuild when
+/// the answer changes.
+///
+/// Lines that animate themselves ([_ActiveWordLine]) still subscribe to the
+/// same notifier inside their own build, so they keep ticking per frame — only
+/// the surrounding wrapper is now quiet.
+class _LitLine extends StatefulWidget {
+  final ValueListenable<double> position;
+  final LyricsTimingType timingType;
+  final double startTime;
+  final double endTime;
+  final Widget Function(bool lit) builder;
+
+  const _LitLine({
+    required this.position,
+    required this.timingType,
+    required this.startTime,
+    required this.endTime,
+    required this.builder,
+  });
+
+  @override
+  State<_LitLine> createState() => _LitLineState();
+}
+
+class _LitLineState extends State<_LitLine> {
+  late bool _lit;
+
+  @override
+  void initState() {
+    super.initState();
+    _lit = _compute();
+    widget.position.addListener(_onPosition);
+  }
+
+  @override
+  void didUpdateWidget(_LitLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.startTime != widget.startTime ||
+        oldWidget.endTime != widget.endTime ||
+        oldWidget.timingType != widget.timingType) {
+      _lit = _compute();
+    }
+    if (!identical(oldWidget.position, widget.position)) {
+      oldWidget.position.removeListener(_onPosition);
+      widget.position.addListener(_onPosition);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.position.removeListener(_onPosition);
+    super.dispose();
+  }
+
+  bool _compute() {
+    // Untimed lyrics stay lit the whole time.
+    if (widget.timingType == LyricsTimingType.none) return true;
+    final sec = widget.position.value;
+    return sec >= widget.startTime && sec <= widget.endTime;
+  }
+
+  void _onPosition() {
+    if (!mounted) return;
+    final next = _compute();
+    if (next == _lit) return;
+    setState(() => _lit = next);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_lit);
 }
 
 class _StaticLine extends StatelessWidget {
@@ -1199,6 +1581,322 @@ class _InterludeDots extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class CinematicScrollPhysics extends BouncingScrollPhysics {
+  const CinematicScrollPhysics({super.parent});
+
+  @override
+  CinematicScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return CinematicScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  double carriedMomentum(double existingVelocity) {
+    return super.carriedMomentum(existingVelocity) * 1.15;
+  }
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) {
+    final inBounds = position.pixels >= position.minScrollExtent &&
+        position.pixels <= position.maxScrollExtent;
+    final boostedVelocity = inBounds && velocity.abs() > minFlingVelocity
+        ? velocity * 1.18
+        : velocity;
+    return super.createBallisticSimulation(position, boostedVelocity);
+  }
+
+  // Weighty, damped overscroll spring for an Apple-like plush bounce.
+  @override
+  SpringDescription get spring => const SpringDescription(
+        mass: 1.25,
+        stiffness: 110.0,
+        damping: 22.0,
+      );
+}
+
+/// Tracks recent auto-scroll offsets so lines below the active focus can trail
+/// slightly behind in a domino/wave ripple without touching layout or blur.
+class _LyricsWaveController extends ChangeNotifier {
+  static const double staggerPerLine = 0.042;
+  static const int maxWaveLines = 7;
+  static const double _maxDelaySec = staggerPerLine * maxWaveLines;
+  static const double _maxHistorySec = _maxDelaySec + 0.25;
+  static const double _maxPosAmp = 38.0;
+  static const double _maxNegAmp = 18.0;
+
+  final ScrollController _scrollController;
+  late final Ticker _ticker;
+  final Stopwatch _clock = Stopwatch()..start();
+  final List<({double time, double offset})> _samples = [];
+
+  bool _enabled = true;
+  bool _disposed = false;
+  double _gain = 1.0;
+  double _lastTickTime = 0.0;
+  double _lastScrollMoveTime = 0.0;
+  double _lastRecordedOffset = 0.0;
+
+  _LyricsWaveController({
+    required ScrollController scrollController,
+    required TickerProvider vsync,
+  }) : _scrollController = scrollController {
+    _scrollController.addListener(_onScroll);
+    _ticker = vsync.createTicker(_onTick);
+  }
+
+  bool get isIdle => _samples.isEmpty || !_ticker.isActive;
+
+  void setEnabled(bool enabled) {
+    if (_disposed || _enabled == enabled) return;
+    _enabled = enabled;
+    final now = _clock.elapsedMicroseconds / 1e6;
+    if (!enabled) {
+      if (_samples.isNotEmpty && _gain > 0.001 && !_ticker.isActive) {
+        _lastTickTime = now;
+        _ticker.start();
+      }
+    } else if (_samples.isEmpty) {
+      _gain = 1.0;
+    }
+  }
+
+  void reset() {
+    if (_disposed) return;
+    final hadSamples = _samples.isNotEmpty;
+    _samples.clear();
+    if (_ticker.isActive) _ticker.stop();
+    _lastRecordedOffset =
+        _scrollController.hasClients ? _scrollController.offset : 0.0;
+    _gain = _enabled ? 1.0 : 0.0;
+    if (hadSamples &&
+        SchedulerBinding.instance.schedulerPhase !=
+            SchedulerPhase.persistentCallbacks) {
+      notifyListeners();
+    }
+  }
+
+  void _onScroll() {
+    if (_disposed || !_scrollController.hasClients) return;
+    final offset = _scrollController.offset;
+    final now = _clock.elapsedMicroseconds / 1e6;
+
+    if (!_enabled) {
+      _lastRecordedOffset = offset;
+      return;
+    }
+
+    if ((offset - _lastRecordedOffset).abs() < 0.05) return;
+
+    if (_samples.isEmpty) {
+      _samples.add((time: now - _maxHistorySec, offset: _lastRecordedOffset));
+      _gain = 1.0;
+    }
+
+    if (_samples.isNotEmpty && now - _samples.last.time < 0.001) {
+      _samples[_samples.length - 1] = (time: now, offset: offset);
+    } else {
+      _samples.add((time: now, offset: offset));
+    }
+
+    _lastScrollMoveTime = now;
+    _lastRecordedOffset = offset;
+    _prune(now);
+
+    if (!_ticker.isActive) {
+      _lastTickTime = now;
+      _ticker.start();
+    }
+
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.transientCallbacks) {
+      notifyListeners();
+    }
+  }
+
+  void _onTick(Duration _) {
+    if (_disposed) return;
+    final now = _clock.elapsedMicroseconds / 1e6;
+    final dt = (now - _lastTickTime).clamp(0.0, 0.05);
+    _lastTickTime = now;
+
+    if (!_enabled) {
+      _gain = (_gain - dt * 8.0).clamp(0.0, 1.0);
+    } else if (_gain < 1.0) {
+      _gain = (_gain + dt * 8.0).clamp(0.0, 1.0);
+    }
+
+    if (_enabled && _scrollController.hasClients && _samples.isNotEmpty) {
+      final offset = _scrollController.offset;
+      if ((offset - _lastRecordedOffset).abs() >= 0.05) {
+        _lastScrollMoveTime = now;
+        _lastRecordedOffset = offset;
+      }
+      if (now - _samples.last.time >= 0.001) {
+        _samples.add((time: now, offset: offset));
+      } else {
+        _samples[_samples.length - 1] = (time: now, offset: offset);
+      }
+    }
+
+    const settleWindow = _maxDelaySec + 0.08;
+    if (_samples.isEmpty ||
+        (!_enabled && _gain <= 0.001) ||
+        (_enabled && now - _lastScrollMoveTime > settleWindow)) {
+      _samples.clear();
+      _ticker.stop();
+      if (_enabled) _gain = 1.0;
+      notifyListeners();
+      return;
+    }
+
+    _prune(now);
+    notifyListeners();
+  }
+
+  void _prune(double now) {
+    final cutoff = now - _maxHistorySec;
+    while (_samples.length > 2 && _samples[1].time <= cutoff) {
+      _samples.removeAt(0);
+    }
+  }
+
+  double offsetForDelay(double delaySec) {
+    if (_samples.isEmpty || delaySec <= 0.0001 || _gain <= 0.001) {
+      return 0.0;
+    }
+    final now = _clock.elapsedMicroseconds / 1e6;
+    final currentOffset = _samples.last.offset;
+    final pastOffset = _sampleAt(now - delaySec);
+    final rawDelta = currentOffset - pastOffset;
+    if (rawDelta.abs() < 0.05) return 0.0;
+
+    final limit = rawDelta >= 0 ? _maxPosAmp : _maxNegAmp;
+    final saturated = (limit * rawDelta) / (limit + rawDelta.abs());
+    return saturated * _gain;
+  }
+
+  double _sampleAt(double targetTime) {
+    if (targetTime <= _samples.first.time) return _samples.first.offset;
+    if (targetTime >= _samples.last.time) return _samples.last.offset;
+
+    for (int i = _samples.length - 2; i >= 0; i--) {
+      final a = _samples[i];
+      if (a.time <= targetTime) {
+        final b = _samples[i + 1];
+        final span = b.time - a.time;
+        final t = span > 1e-6 ? (targetTime - a.time) / span : 1.0;
+        return ui.lerpDouble(a.offset, b.offset, t)!;
+      }
+    }
+    return _samples.first.offset;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _scrollController.removeListener(_onScroll);
+    _ticker.dispose();
+    _samples.clear();
+    super.dispose();
+  }
+}
+
+/// Applies the GPU-only vertical wave offset for a single lyrics item.
+class _DominoWaveItem extends StatefulWidget {
+  final _LyricsWaveController controller;
+  final int displayIndex;
+  final int focusDisplayIndex;
+  final bool enabled;
+  final Widget child;
+
+  const _DominoWaveItem({
+    required this.controller,
+    required this.displayIndex,
+    required this.focusDisplayIndex,
+    required this.enabled,
+    required this.child,
+  });
+
+  @override
+  State<_DominoWaveItem> createState() => _DominoWaveItemState();
+}
+
+class _DominoWaveItemState extends State<_DominoWaveItem> {
+  double _dy = 0.0;
+  double _effectiveDelay = 0.0;
+
+  double get _targetDelay {
+    if (!widget.enabled || widget.focusDisplayIndex < 0) return 0.0;
+    final delta = widget.displayIndex - widget.focusDisplayIndex;
+    if (delta <= 0) return 0.0;
+    final clamped = delta > _LyricsWaveController.maxWaveLines
+        ? _LyricsWaveController.maxWaveLines
+        : delta;
+    return clamped * _LyricsWaveController.staggerPerLine;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _effectiveDelay = _targetDelay;
+    _dy = _computeDy();
+    widget.controller.addListener(_onWaveTick);
+  }
+
+  @override
+  void didUpdateWidget(_DominoWaveItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller.removeListener(_onWaveTick);
+      widget.controller.addListener(_onWaveTick);
+    }
+    if (widget.controller.isIdle) {
+      _effectiveDelay = _targetDelay;
+      _dy = 0.0;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onWaveTick);
+    super.dispose();
+  }
+
+  double _computeDy() {
+    if (_effectiveDelay <= 0.0005) return 0.0;
+    final next = widget.controller.offsetForDelay(_effectiveDelay);
+    return next.abs() < 0.05 ? 0.0 : next;
+  }
+
+  void _onWaveTick() {
+    if (!mounted) return;
+    final target = _targetDelay;
+    if (widget.controller.isIdle) {
+      _effectiveDelay = target;
+    } else {
+      _effectiveDelay += (target - _effectiveDelay) * 0.35;
+      if ((target - _effectiveDelay).abs() < 0.001) {
+        _effectiveDelay = target;
+      }
+    }
+
+    final nextDy = _computeDy();
+    if ((nextDy - _dy).abs() >= 0.05 || (nextDy == 0.0 && _dy != 0.0)) {
+      setState(() => _dy = nextDy);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.translate(
+      offset: Offset(0.0, _dy),
+      child: widget.child,
     );
   }
 }

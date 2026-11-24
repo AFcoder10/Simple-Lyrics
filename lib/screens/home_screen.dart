@@ -2,17 +2,24 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import '../core/platform_capabilities.dart';
 import '../models/media_state.dart';
 import '../services/media_session_service.dart';
 import '../services/lyrics_service.dart';
 import '../services/lyrics_models.dart';
 import '../services/artwork_service.dart';
+import '../services/playback_clock.dart';
 import '../services/update_service.dart';
 import '../widgets/now_playing_header.dart';
+import '../widgets/lyrics_fade_mask.dart';
 import '../widgets/lyrics_view.dart';
 import '../widgets/playback_controls.dart';
 import '../services/settings_service.dart';
+import '../services/window_service.dart';
 import '../widgets/backgrounds/background_controller.dart';
+import '../widgets/compact_player.dart';
+import '../widgets/now_playing_split_view.dart';
+import 'windows_settings.dart';
 
 const bool _lyricsHeaderFadeEnabled = true;
 
@@ -34,13 +41,14 @@ class _HomeScreenState extends State<HomeScreen>
   late final Ticker _positionTicker;
   final ValueNotifier<Duration> _visualPositionNotifier = ValueNotifier<Duration>(Duration.zero);
   final ValueNotifier<Duration> _lyricsPositionNotifier = ValueNotifier<Duration>(Duration.zero);
-  Duration get _visualPosition => _visualPositionNotifier.value;
-  DateTime _lastPositionTick = DateTime.now();
-  bool _hasVisualTrack = false;
-  bool _isPreviewingPosition = false;
+
+  /// Single source of truth for playback position. See [PlaybackClock].
+  final PlaybackClock _clock = PlaybackClock(nativeLag: defaultNativeLag);
+  VoidCallback? _seekRequestedListener;
+  VoidCallback? _advancingRequestedListener;
+
   bool _useLyricsOffset = true;
   bool _controlsVisible = true;
-  bool _trackTransitioning = false;
   Timer? _hideTimer;
 
   // Lyrics state
@@ -57,6 +65,19 @@ class _HomeScreenState extends State<HomeScreen>
   String _lastArtworkFetchKey = '';
   String? _artworkFetchInFlightKey;
 
+  /// How long a `title|artist` pair must hold still before it is treated as
+  /// the real identity of the current track.
+  ///
+  /// GSMTC apps report title, artist and album in separate stages, and
+  /// sometimes briefly publish an empty field, so committing on the first
+  /// differing sample means asking the lyrics/artwork APIs about half-old
+  /// metadata — and getting a confidently wrong answer back.
+  static const _metadataSettle = Duration(milliseconds: 600);
+
+  String _observedSongKey = '';
+  DateTime _observedSince = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _metadataSettleTimer;
+
   @override
   void initState() {
     super.initState();
@@ -64,6 +85,29 @@ class _HomeScreenState extends State<HomeScreen>
     _positionTicker = createTicker((_) => _tickVisualPosition())..start();
     widget.service.init();
     _subscription = widget.service.mediaStateStream.listen(_onMediaStateUpdate);
+
+    // Every seek path (scrub, keyboard shortcuts, transport buttons) funnels
+    // through MediaSessionService.seekTo, so listening here is enough for the
+    // clock to protect the target on all of them.
+    _seekRequestedListener = () {
+      final target = widget.service.seekRequested.value;
+      if (target != null && mounted) {
+        _clock.beginSeek(target);
+        _visualPositionNotifier.value = _clock.position;
+        _lyricsPositionNotifier.value = _lyricsPosition;
+      }
+    };
+    widget.service.seekRequested.addListener(_seekRequestedListener!);
+
+    _advancingRequestedListener = () {
+      final advancing = widget.service.advancingRequested.value;
+      if (advancing != null && mounted) {
+        _clock.setAdvancing(advancing);
+        _visualPositionNotifier.value = _clock.position;
+        _lyricsPositionNotifier.value = _lyricsPosition;
+      }
+    };
+    widget.service.advancingRequested.addListener(_advancingRequestedListener!);
     _startHideTimer();
     // Silently check for updates on launch after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -102,99 +146,89 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
 
+  /// Repaints both position notifiers from the clock. Runs every frame, so the
+  /// scrubber and the lyric highlight move continuously between native events
+  /// and respond on the very next frame to pause, resume and seeks.
   void _tickVisualPosition() {
-    final now = DateTime.now();
-    final elapsed = now.difference(_lastPositionTick);
-    _lastPositionTick = now;
-
-    if (_isPreviewingPosition || !_mediaState.isPlaying || _mediaState.isEmpty || _trackTransitioning) {
-      return;
-    }
-
-    final duration = _mediaState.duration;
-    final nextPosition = duration > Duration.zero &&
-            _visualPositionNotifier.value + elapsed > duration
-        ? duration
-        : _visualPositionNotifier.value + elapsed;
-
-    if (nextPosition == _visualPositionNotifier.value) return;
-
-    _visualPositionNotifier.value = nextPosition;
+    final position = _clock.position;
+    _visualPositionNotifier.value = position;
     _lyricsPositionNotifier.value = _lyricsPosition;
+    widget.service.displayPosition = position;
   }
 
+  /// Hands a native sample to the clock, which reconciles it with where the
+  /// UI currently believes playback is.
   void _syncVisualPosition(MediaState state, {required bool songChanged}) {
-    _lastPositionTick = DateTime.now();
-
-    if (_isPreviewingPosition) return;
-
     if (state.isEmpty) {
+      _clock.reset();
       _visualPositionNotifier.value = Duration.zero;
       _lyricsPositionNotifier.value = Duration.zero;
-      _hasVisualTrack = false;
       return;
     }
 
-    if (songChanged) {
-      _visualPositionNotifier.value = Duration.zero;
-      _lyricsPositionNotifier.value = Duration.zero;
-      _trackTransitioning = true;
-      _hasVisualTrack = true;
-      return;
-    }
+    _clock.sync(
+      position: state.position,
+      isPlaying: state.isAdvancing,
+      duration: state.duration,
+      playbackRate: state.playbackRate,
+      songChanged: songChanged,
+    );
 
-    if (_trackTransitioning) {
-      _trackTransitioning = false;
-    }
-
-    final realPosition = state.position;
-    final deltaMs =
-        (realPosition.inMilliseconds - _visualPositionNotifier.value.inMilliseconds).abs();
-    final movedBackward = realPosition < _visualPositionNotifier.value &&
-        _visualPositionNotifier.value.inMilliseconds - realPosition.inMilliseconds > 250;
-
-    Duration nextPosition = _visualPositionNotifier.value;
-    if (!_hasVisualTrack || !state.isPlaying || movedBackward || deltaMs > 120) {
-      nextPosition = realPosition;
-    } else if (deltaMs > 16) {
-      final correctionUs =
-          ((realPosition - _visualPositionNotifier.value).inMicroseconds * 0.85).round();
-      nextPosition += Duration(microseconds: correctionUs);
-    }
-
-    final duration = state.duration;
-    if (duration > Duration.zero && nextPosition > duration) {
-      nextPosition = duration;
-    }
-
-    _visualPositionNotifier.value = nextPosition;
+    _visualPositionNotifier.value = _clock.position;
     _lyricsPositionNotifier.value = _lyricsPosition;
-    _hasVisualTrack = true;
   }
 
   void _previewVisualPosition(Duration position) {
     final duration = _mediaState.duration;
-    final clampedPosition = duration > Duration.zero && position > duration
+    final clamped = duration > Duration.zero && position > duration
         ? duration
         : position;
 
-    _visualPositionNotifier.value = clampedPosition;
+    if (!_clock.previewing) _clock.beginPreview();
+    _clock.updatePreview(clamped);
+
+    _visualPositionNotifier.value = _clock.position;
     _lyricsPositionNotifier.value = _lyricsPosition;
-    _lastPositionTick = DateTime.now();
   }
 
   void _setPositionPreviewing(bool isPreviewing) {
-    _isPreviewingPosition = isPreviewing;
-    _lastPositionTick = DateTime.now();
+    if (isPreviewing) {
+      _clock.beginPreview();
+    } else {
+      // Releasing the drag commits the previewed position as a pending seek,
+      // so the UI holds where the user dropped it until the source app answers.
+      _clock.endPreview();
+    }
+    _visualPositionNotifier.value = _clock.position;
+    _lyricsPositionNotifier.value = _lyricsPosition;
   }
 
   void _onMediaStateUpdate(MediaState state) {
     if (!mounted) return;
 
-    final songKey = '${state.title}|${state.artist}';
+    final now = DateTime.now();
+    final incomingKey = '${state.title}|${state.artist}';
+
+    if (incomingKey != _observedSongKey) {
+      _observedSongKey = incomingKey;
+      _observedSince = now;
+      // A paused session publishes nothing, so waiting for the next tick to
+      // re-check whether the pair has settled can mean waiting forever. Arm a
+      // timer instead — that is what actually completes the settle.
+      _metadataSettleTimer?.cancel();
+      _metadataSettleTimer = Timer(_metadataSettle, () {
+        if (mounted) _updateFetches();
+      });
+    }
+
     final previousSongKey = '${_mediaState.title}|${_mediaState.artist}';
-    final songChanged = songKey != previousSongKey;
-    
+    // GSMTC often publishes title and artist one field at a time. Treating
+    // those half-frames as a new song resets the clock and the highlight
+    // jumps to 0 (or to a stale other-track position).
+    final songChanged = incomingKey != previousSongKey &&
+        _hasStableIdentity(state) &&
+        _hasStableIdentity(_mediaState);
+
     final displayState =
         !songChanged && state.albumArtBytes == null
             ? state.copyWithArtwork(
@@ -203,48 +237,75 @@ class _HomeScreenState extends State<HomeScreen>
               )
             : state;
 
+    setState(() {
+      if (songChanged) {
+        _useLyricsOffset = true;
+      }
+      _syncVisualPosition(displayState, songChanged: songChanged);
+      _mediaState = displayState;
+    });
+
+    _updateFetches();
+  }
+
+  /// The single place lyrics and artwork requests are decided, so the same
+  /// gate can run on every state tick and once more when metadata settles.
+  void _updateFetches() {
+    final state = _mediaState;
+    final songKey = '${state.title}|${state.artist}';
     final now = DateTime.now();
+
+    // Nothing is asked about until the pair has held still — and only for the
+    // sample that actually armed the settle.
+    if (songKey != _observedSongKey) return;
+    if (now.difference(_observedSince) < _metadataSettle) return;
+
     final recentlyAttempted = songKey == _lastLyricsAttemptKey &&
-      now.difference(_lastLyricsAttemptAt) < const Duration(seconds: 8);
-    final shouldFetchLyrics =
-      songKey != _lastFetchedKey &&
-      !displayState.isEmpty &&
-      !recentlyAttempted &&
-      _lyricsFetchInFlightKey != songKey;
-    final shouldFetchArtwork = !displayState.isEmpty &&
-        displayState.albumArtBytes == null &&
+        now.difference(_lastLyricsAttemptAt) < const Duration(seconds: 8);
+    final shouldFetchLyrics = songKey != _lastFetchedKey &&
+        !state.isEmpty &&
+        !recentlyAttempted &&
+        _lyricsFetchInFlightKey != songKey;
+    final shouldFetchArtwork = !state.isEmpty &&
+        state.albumArtBytes == null &&
         songKey != _lastArtworkFetchKey &&
         songKey != _artworkFetchInFlightKey;
 
-    setState(() {
-      if (songChanged) {
-        _isPreviewingPosition = false;
-        _useLyricsOffset = true;
-      }
-      if (shouldFetchLyrics) {
+    if (!shouldFetchLyrics && !shouldFetchArtwork) return;
+
+    if (shouldFetchLyrics) {
+      setState(() {
         _lyricsLoading = true;
         _lyricsError = null;
         _lyricsData = null;
         _lyricsFetchInFlightKey = songKey;
         _lastLyricsAttemptKey = songKey;
         _lastLyricsAttemptAt = now;
-      }
-      _syncVisualPosition(displayState, songChanged: songChanged);
-      _mediaState = displayState;
-    });
-
-    if (shouldFetchLyrics) {
-      _fetchLyrics(displayState.title, displayState.artist, songKey);
+      });
+      _fetchLyrics(state.title, state.artist, songKey);
     }
     if (shouldFetchArtwork) {
-      _fetchArtwork(displayState.title, displayState.artist, displayState.album, songKey);
+      _fetchArtwork(state.title, state.artist, state.album, songKey);
     }
   }
 
+  static bool _hasStableIdentity(MediaState state) {
+    if (state.isEmpty) return false;
+    final title = state.title.trim();
+    final artist = state.artist.trim();
+    if (title.isEmpty ||
+        title == 'Unknown Title' ||
+        title == 'No media playing') {
+      return false;
+    }
+    if (artist.isEmpty || artist == 'Unknown Artist') return false;
+    return true;
+  }
+
   Duration get _lyricsPosition {
-    if (!_useLyricsOffset) return _visualPosition;
+    if (!_useLyricsOffset) return _clock.position;
     final offsetMs = SettingsService().lyricsOffsetMs.value;
-    final offsetPos = _visualPosition + Duration(milliseconds: offsetMs);
+    final offsetPos = _clock.position + Duration(milliseconds: offsetMs);
     return offsetPos < Duration.zero ? Duration.zero : offsetPos;
   }
 
@@ -275,8 +336,17 @@ class _HomeScreenState extends State<HomeScreen>
       if (mounted && _lyricsFetchInFlightKey == songKey) {
         _lyricsFetchInFlightKey = null;
       }
-      if (mounted && !data.isEmpty) {
-        _lastFetchedKey = songKey;
+      if (mounted) {
+        if (!data.isEmpty) {
+          // Only an actual match locks the key.
+          _lastFetchedKey = songKey;
+        } else {
+          // A confirmed miss leaves the key open so corrected metadata can
+          // retry immediately, but backs off for a minute so a song the API
+          // genuinely does not have is not re-asked on every tick.
+          _lastLyricsAttemptKey = songKey;
+          _lastLyricsAttemptAt = DateTime.now().add(const Duration(minutes: 1));
+        }
       }
     } catch (e) {
       final isCurrentSong = '${_mediaState.title}|${_mediaState.artist}' == songKey;
@@ -288,6 +358,11 @@ class _HomeScreenState extends State<HomeScreen>
       }
       if (mounted && _lyricsFetchInFlightKey == songKey) {
         _lyricsFetchInFlightKey = null;
+      }
+      // Network failures are worth retrying, but not on every state tick.
+      if (mounted) {
+        _lastLyricsAttemptKey = songKey;
+        _lastLyricsAttemptAt = DateTime.now().add(const Duration(minutes: 1));
       }
     }
   }
@@ -366,8 +441,18 @@ class _HomeScreenState extends State<HomeScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _hideTimer?.cancel();
+    _metadataSettleTimer?.cancel();
     _positionTicker.dispose();
     _subscription?.cancel();
+    if (_seekRequestedListener != null) {
+      widget.service.seekRequested.removeListener(_seekRequestedListener!);
+      _seekRequestedListener = null;
+    }
+    if (_advancingRequestedListener != null) {
+      widget.service.advancingRequested
+          .removeListener(_advancingRequestedListener!);
+      _advancingRequestedListener = null;
+    }
     _lyricsService.dispose();
     _artworkService.dispose();
     _visualPositionNotifier.dispose();
@@ -393,6 +478,77 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (!WindowService.isSupported) return _buildStandard(context);
+
+    // Windows is its own app: the windowed, fullscreen and compact modes each
+    // get their own layout rather than the phone layout being stretched.
+    return ValueListenableBuilder<WindowMode>(
+      valueListenable: WindowService.mode,
+      builder: (context, mode, _) {
+        switch (mode) {
+          case WindowMode.compact:
+            return _buildCompact();
+          case WindowMode.windowed:
+            return _buildSplit(fullscreen: false);
+          case WindowMode.fullscreen:
+            return _buildSplit(fullscreen: true);
+        }
+      },
+    );
+  }
+
+  /// The lyrics widget shared by every desktop layout. One instance lives
+  /// behind [_lyricsKey] so scrolling state survives a mode change.
+  ///
+  /// Wrapped in a [LyricsFadeMask] because the scroll viewport hard-clips its
+  /// content: without it the pane reads as a box with a sharp rule drawn across
+  /// its top and bottom edges rather than lyrics dissolving into the artwork.
+  Widget _buildDesktopLyrics() {
+    return LyricsFadeMask(
+      child: LyricsView(
+        key: _lyricsKey,
+        trackKey: '${_mediaState.title}|${_mediaState.artist}',
+        lyricsData: _lyricsData,
+        positionNotifier: _lyricsPositionNotifier,
+        duration: _mediaState.duration,
+        service: widget.service,
+        onLyricsInteraction: _clearLyricsOffset,
+        isLoading: _lyricsLoading,
+        errorMessage: _lyricsError,
+      ),
+    );
+  }
+
+  void _openDesktopSettings() {
+    showWindowsSettings(context, widget.service);
+  }
+
+  Widget _buildSplit({required bool fullscreen}) {
+    return NowPlayingSplitView(
+      mediaState: _mediaState,
+      service: widget.service,
+      lyrics: _buildDesktopLyrics(),
+      positionNotifier: _visualPositionNotifier,
+      fullscreen: fullscreen,
+      onSettings: _openDesktopSettings,
+      onPositionPreview: _previewVisualPosition,
+      onPositionPreviewing: _setPositionPreviewing,
+    );
+  }
+
+  Widget _buildCompact() {
+    return CompactPlayer(
+      mediaState: _mediaState,
+      service: widget.service,
+      lyrics: _buildDesktopLyrics(),
+      positionNotifier: _visualPositionNotifier,
+      onSettings: _openDesktopSettings,
+      onPositionPreview: _previewVisualPosition,
+      onPositionPreviewing: _setPositionPreviewing,
+    );
+  }
+
+  Widget _buildStandard(BuildContext context) {
     final isEmptyState = _mediaState.isEmpty;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -429,8 +585,12 @@ class _HomeScreenState extends State<HomeScreen>
                 child: ValueListenableBuilder<bool>(
                   valueListenable: SettingsService().isFullScreenArtworkOpen,
                   builder: (context, isFullScreenOpen, child) {
+                    final hideForTransparentFullscreen = isFullScreenOpen &&
+                        SettingsService()
+                            .showBackgroundInFullScreenArtwork
+                            .value;
                     return AnimatedOpacity(
-                      opacity: isFullScreenOpen ? 0.0 : 1.0,
+                      opacity: hideForTransparentFullscreen ? 0.0 : 1.0,
                       duration: const Duration(milliseconds: 400),
                       curve: Curves.easeInOut,
                       child: child,

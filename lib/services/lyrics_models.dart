@@ -83,7 +83,7 @@ class LyricsLine {
 
   /// Check if this line should be active at the given position.
   bool isActiveAt(Duration position) {
-    final seconds = position.inMilliseconds / 1000.0;
+    final seconds = position.inMicroseconds / 1e6;
     return seconds >= startTime && seconds < endTime;
   }
 
@@ -112,7 +112,7 @@ class LyricsData {
   /// Returns all indices of lines active at [position] (allows overlapping lines).
   List<int> activeLineIndices(Duration position) {
     if (lines.isEmpty) return [];
-    final seconds = position.inMilliseconds / 1000.0;
+    final seconds = position.inMicroseconds / 1e6;
     
     final active = <int>[];
     for (int i = 0; i < lines.length; i++) {

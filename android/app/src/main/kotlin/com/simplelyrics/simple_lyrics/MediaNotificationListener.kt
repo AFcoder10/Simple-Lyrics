@@ -175,17 +175,20 @@ class MediaNotificationListener : NotificationListenerService() {
         val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
         var position = playbackState?.position ?: 0L
         val stateCode = playbackState?.state ?: lastReportedState
-        val isPlaying = stateCode == PlaybackState.STATE_PLAYING ||
-            stateCode == PlaybackState.STATE_BUFFERING
+        val playbackSpeed = playbackState?.playbackSpeed ?: 1f
+        val isAdvancing = stateCode == PlaybackState.STATE_PLAYING && playbackSpeed != 0f
+        // Buffering still counts as "playing" for the transport glyph, but the
+        // lyric clock must freeze until audio is moving again.
+        val isPlaying = isAdvancing || stateCode == PlaybackState.STATE_BUFFERING
         val repeatMode = getPlaybackStateInt(playbackState, "repeatMode", repeatModeNone)
         val shuffleMode = getPlaybackStateInt(playbackState, "shuffleMode", shuffleModeNone)
         val actions = playbackState?.actions ?: 0L
         val supportsRepeatMode = (actions and actionSetRepeatMode) != 0L
         val supportsShuffleMode = (actions and actionSetShuffleMode) != 0L
-        
-        if (isPlaying && playbackState != null) {
+
+        if (isAdvancing && playbackState != null) {
             val timeDelta = SystemClock.elapsedRealtime() - playbackState.lastPositionUpdateTime
-            position += (timeDelta * playbackState.playbackSpeed).toLong()
+            position += (timeDelta * playbackSpeed).toLong()
         }
 
         val stateMap = mutableMapOf<String, Any?>(
@@ -195,6 +198,8 @@ class MediaNotificationListener : NotificationListenerService() {
             "position" to position,
             "duration" to duration,
             "isPlaying" to isPlaying,
+            "isAdvancing" to isAdvancing,
+            "playbackRate" to playbackSpeed.toDouble(),
             "repeatMode" to repeatMode,
             "shuffleMode" to shuffleMode,
             "supportsRepeatMode" to supportsRepeatMode,

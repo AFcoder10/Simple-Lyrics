@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:video_player/video_player.dart';
+
+import '../core/platform_capabilities.dart';
 
 /// A premium, self-contained video player for HLS animated artwork.
 /// Streams looping, muted videos and handles seamless transitions between tracks.
@@ -48,6 +52,10 @@ class _AnimatedArtworkPlayerState extends State<AnimatedArtworkPlayer> {
 
   Future<void> _initializePlayer(String url) async {
     if (url.isEmpty) return;
+
+    // video_player has no Windows backend, so fall back to the static
+    // placeholder rather than throwing MissingPluginException.
+    if (!supportsVideoPlayback) return;
 
     VideoPlayerController controller;
     bool isNew = false;
@@ -124,6 +132,8 @@ class _AnimatedArtworkPlayerState extends State<AnimatedArtworkPlayer> {
   String? _oldUrl;
 
   void _transitionToNewUrl(String newUrl) {
+    if (!supportsVideoPlayback) return;
+
     if (!widget.enableCrossFade) {
       if (_controller != null) {
         _disposeController(widget.url, _controller!);
@@ -171,6 +181,21 @@ class _AnimatedArtworkPlayerState extends State<AnimatedArtworkPlayer> {
 
   @override
   Widget build(BuildContext context) {
+    // Desktop has no video_player implementation, so HLS artwork is rendered by
+    // media_kit instead. Keying on the URL makes a track change tear down and
+    // rebuild the decoder, which avoids showing the previous track's frames
+    // over the new one.
+    if (supportsAnimatedArtwork) {
+      if (widget.url.isEmpty) return widget.placeholder;
+      return _MediaKitArtwork(
+        key: ValueKey('media_kit_artwork:${widget.url}'),
+        url: widget.url,
+        placeholder: widget.placeholder,
+        fit: widget.fit,
+        alignment: widget.alignment,
+      );
+    }
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -230,6 +255,109 @@ class _AnimatedArtworkPlayerState extends State<AnimatedArtworkPlayer> {
               ),
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// Desktop animated-artwork renderer backed by media_kit (libmpv).
+///
+/// [video_player] ships no Windows implementation, so on Windows this is the
+/// only path that can play Apple Music's animated artwork. The static artwork
+/// stays underneath so the box is never empty while the stream buffers.
+class _MediaKitArtwork extends StatefulWidget {
+  final String url;
+  final Widget placeholder;
+  final BoxFit fit;
+  final Alignment alignment;
+
+  const _MediaKitArtwork({
+    super.key,
+    required this.url,
+    required this.placeholder,
+    this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
+  });
+
+  @override
+  State<_MediaKitArtwork> createState() => _MediaKitArtworkState();
+}
+
+class _MediaKitArtworkState extends State<_MediaKitArtwork> {
+  Player? _player;
+  VideoController? _controller;
+  bool _ready = false;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _open();
+  }
+
+  Future<void> _open() async {
+    final player = Player();
+
+    try {
+      await player.open(Media(widget.url), play: true);
+      // The source music app owns the audio; artwork is purely decorative.
+      await player.setVolume(0.0);
+      await player.setPlaylistMode(PlaylistMode.loop);
+    } catch (e) {
+      debugPrint('AnimatedArtworkPlayer media_kit error: $e');
+      await player.dispose();
+      if (mounted) {
+        setState(() => _failed = true);
+      }
+      return;
+    }
+
+    if (!mounted) {
+      await player.dispose();
+      return;
+    }
+
+    setState(() {
+      _player = player;
+      _controller = VideoController(player);
+      _ready = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    final player = _player;
+    _player = null;
+    _controller = null;
+    if (player != null) {
+      // Fire and forget: awaiting inside dispose would delay the next track.
+      player.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_failed || !_ready || _controller == null) {
+      return widget.placeholder;
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Static artwork underneath, so there is never a blank frame while the
+        // HLS stream fills its buffer.
+        widget.placeholder,
+        Video(
+          controller: _controller!,
+          fit: widget.fit,
+          alignment: widget.alignment,
+          // Transparent so the placeholder shows through until the first frame
+          // arrives, instead of flashing black over it.
+          fill: Colors.transparent,
+          controls: null,
+          wakelock: false,
+        ),
       ],
     );
   }

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'services/media_session_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/permission_screen.dart';
 import 'services/settings_service.dart';
+import 'widgets/desktop_shortcuts.dart';
 
 import 'core/font_fallbacks.dart';
 
@@ -26,6 +29,11 @@ void main() async {
 
   // Load persisted settings before launching UI to avoid race conditions
   await SettingsService().init();
+
+  // media_kit needs the native libmpv bindings initialized once on the main
+  // isolate before any Player is constructed.
+  MediaKit.ensureInitialized();
+
   runApp(const SimpleLyricsApp());
 }
 
@@ -48,7 +56,12 @@ class _SimpleLyricsAppState extends State<SimpleLyricsApp> {
   }
 
   Future<void> _checkInitialPermission() async {
-    final granted = await _mediaService.isPermissionGranted();
+    // Android needs NotificationListenerService consent to observe other apps'
+    // media sessions. Windows GSMTC exposes sessions without any user-granted
+    // permission, so the gate is skipped entirely there.
+    final granted = Platform.isAndroid
+        ? await _mediaService.isPermissionGranted()
+        : true;
     setState(() {
       _hasPermission = granted;
       _permissionChecked = true;
@@ -102,7 +115,10 @@ class _SimpleLyricsAppState extends State<SimpleLyricsApp> {
     }
 
     if (_hasPermission) {
-      return HomeScreen(service: _mediaService);
+      return DesktopShortcuts(
+        mediaService: _mediaService,
+        child: HomeScreen(service: _mediaService),
+      );
     } else {
       return PermissionScreen(service: _mediaService);
     }

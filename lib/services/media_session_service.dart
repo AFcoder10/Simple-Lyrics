@@ -15,6 +15,28 @@ class MediaSessionService {
   StreamSubscription? _eventSubscription;
   Timer? _refreshTimer;
   MediaState _currentState = MediaState.empty();
+
+  /// Fired whenever a seek is requested, by any code path (scrub, keyboard,
+  /// transport buttons). The PlaybackClock subscribes to this so the UI holds
+  /// the target until the source app confirms it, instead of snapping back to
+  /// the pre-seek position while the platform catches up.
+  final ValueNotifier<Duration?> seekRequested = ValueNotifier<Duration?>(null);
+
+  /// Fired on local play/pause so the lyric clock can freeze or resume on the
+  /// next frame, instead of waiting for the source app to publish the new
+  /// PlaybackStatus.
+  final ValueNotifier<bool?> advancingRequested = ValueNotifier<bool?>(null);
+
+  /// The position the UI is currently showing. Keyboard seeks add to this
+  /// rather than the lagging native snapshot, so repeated arrow-key seeks
+  /// stack on what the user sees.
+  Duration displayPosition = Duration.zero;
+
+  /// The track currently displayed, used to spot a track change on the very
+  /// first snapshot instead of waiting for a second, differing one.
+  String _activeTrackKey = '';
+
+  String _trackKeyOf(MediaState state) => '${state.title}|${state.artist}';
   
   /// Whether the user is currently interacting (dragging slider, seeking, etc).
   /// Used to hide interludes and other UI elements that should clear on user action.
@@ -76,18 +98,20 @@ class MediaSessionService {
         })
         .listen(
       (state) {
-        final currentSongKey = '${_currentState.title}|${_currentState.artist}';
-        final nextSongKey = '${state.title}|${state.artist}';
-        final songChanged = !_currentState.isEmpty &&
-            !state.isEmpty &&
-            currentSongKey != nextSongKey;
+        final nextSongKey = _trackKeyOf(state);
+        final songChanged =
+            _activeTrackKey.isNotEmpty && nextSongKey != _activeTrackKey;
 
-        final syncedState = songChanged
-            ? state.copyWith(position: Duration.zero)
-            : state;
+        if (songChanged) {
+          _activeTrackKey = nextSongKey;
+        } else if (nextSongKey != _activeTrackKey) {
+          // First snapshot ever: adopt the track without treating it as a
+          // change.
+          _activeTrackKey = nextSongKey;
+        }
 
-        _currentState = syncedState;
-        _stateController.add(syncedState);
+        _currentState = state;
+        _stateController.add(state);
         _syncRefreshTimer();
 
         if (songChanged) {
@@ -104,7 +128,7 @@ class MediaSessionService {
   }
 
   void _syncRefreshTimer() {
-    if (_currentState.isPlaying && !_currentState.isEmpty) {
+    if (_currentState.isAdvancing && !_currentState.isEmpty) {
       if (_refreshTimer?.isActive ?? false) return;
       _refreshTimer = Timer.periodic(
         const Duration(milliseconds: 500),
@@ -136,22 +160,12 @@ class MediaSessionService {
     }
   }
 
-  void _publishLocalPosition(Duration position) {
-    final duration = _currentState.duration;
-    final clampedPosition = duration > Duration.zero && position > duration
-        ? duration
-        : position;
-    _currentState = _currentState.copyWith(
-      position: clampedPosition,
-      lastUpdated: DateTime.now(),
-    );
-    _stateController.add(_currentState);
-  }
-
   // ─── Transport Controls ───────────────────────────────────────────────
 
   Future<void> play() async {
     try {
+      advancingRequested.value = true;
+      advancingRequested.value = null;
       await _methodChannel.invokeMethod('play');
       await refreshState();
     } on PlatformException catch (e) {
@@ -162,6 +176,8 @@ class MediaSessionService {
 
   Future<void> pause() async {
     try {
+      advancingRequested.value = false;
+      advancingRequested.value = null;
       await _methodChannel.invokeMethod('pause');
       await refreshState();
     } on PlatformException catch (e) {
@@ -192,7 +208,12 @@ class MediaSessionService {
 
   Future<void> seekTo(Duration position) async {
     try {
-      _publishLocalPosition(position);
+      // Let the playback clock lock onto the target before the source app has
+      // had a chance to answer, so the scrubber does not spring back first.
+      // Do *not* publish a fake native sample: that would confirm the seek
+      // and then the next stale GSMTC report would yank the highlight back.
+      seekRequested.value = position;
+      seekRequested.value = null;
       await _methodChannel.invokeMethod('seekTo', position.inMilliseconds);
       await refreshState();
     } on PlatformException catch (e) {
@@ -249,6 +270,8 @@ class MediaSessionService {
     _refreshTimer?.cancel();
     _interactionResetTimer?.cancel();
     _eventSubscription?.cancel();
+    seekRequested.dispose();
+    advancingRequested.dispose();
     _stateController.close();
   }
 }

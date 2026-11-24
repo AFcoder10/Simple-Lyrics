@@ -16,7 +16,7 @@ class SettingsService {
   late SharedPreferences _prefs;
   
   final ValueNotifier<bool> romanizationEnabled = ValueNotifier<bool>(true);
-  final ValueNotifier<double> lyricsFontSize = ValueNotifier<double>(35.0);
+  final ValueNotifier<double> lyricsFontSize = ValueNotifier<double>(33.0);
   final ValueNotifier<int> lyricsOffsetMs = ValueNotifier<int>(0); // ±50ms offset
   final ValueNotifier<bool> hapticLyricsEnabled = ValueNotifier<bool>(false);
   final ValueNotifier<double> hapticIntensity = ValueNotifier<double>(0.5); // 0.0 to 1.0
@@ -42,7 +42,7 @@ class SettingsService {
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     romanizationEnabled.value = _readBool('romanization_enabled') ?? true;
-    lyricsFontSize.value = _readDouble('lyrics_font_size') ?? 35.0;
+    lyricsFontSize.value = _readDouble('lyrics_font_size') ?? 33.0;
     lyricsOffsetMs.value = _readInt('lyrics_offset_ms') ?? 0;
     hapticLyricsEnabled.value = _readBool('haptic_lyrics_enabled') ?? false;
     hapticIntensity.value = _readDouble('haptic_intensity') ?? 0.5;

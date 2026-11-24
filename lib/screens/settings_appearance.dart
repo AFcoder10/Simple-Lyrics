@@ -1,17 +1,23 @@
 import 'package:simple_lyrics/core/font_fallbacks.dart';
 import 'package:flutter/material.dart';
+import '../core/settings_route.dart';
 import '../services/settings_service.dart';
 import 'settings_background.dart';
 
 class AppearanceSettingsScreen extends StatelessWidget {
-  const AppearanceSettingsScreen({super.key});
+  /// Hosted inside the desktop settings pane, which supplies its own title, so
+  /// the section drops its back-arrow [AppBar] rather than rendering a second
+  /// one the user cannot usefully press.
+  final bool embedded;
+
+  const AppearanceSettingsScreen({super.key, this.embedded = false});
 
   @override
   Widget build(BuildContext context) {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
-      appBar: AppBar(
+      appBar: embedded ? null : AppBar(
         backgroundColor: const Color(0xFF0A0A0A),
         elevation: 0,
         title: const Text(
@@ -77,14 +83,7 @@ class AppearanceSettingsScreen extends StatelessWidget {
             trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white24, size: 16),
             onTap: () {
               Navigator.of(context).push(
-                PageRouteBuilder(
-                  pageBuilder: (context, animation, secondaryAnimation) => const BackgroundSettingsScreen(),
-                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  transitionDuration: const Duration(milliseconds: 350),
-                  reverseTransitionDuration: const Duration(milliseconds: 350),
-                ),
+                buildSettingsRoute(const BackgroundSettingsScreen()),
               );
             },
           ),

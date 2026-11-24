@@ -75,7 +75,8 @@ class ArtworkService {
     if (staticArtworkUrl == null || staticArtworkUrl.isEmpty) {
       try {
         // ALWAYS fetch static artwork first and do NOT wait for animated artwork!
-        final staticJson = await _fetchStaticArtworkPayload(songName, artistName);
+        final staticJson =
+            await _fetchStaticArtworkPayload(songName, artistName, albumName);
         if (staticJson != null) {
           staticArtworkUrl = staticJson['static_artwork_url'] as String? ?? 
                              staticJson['artwork_url'] as String?;
@@ -142,11 +143,15 @@ class ArtworkService {
   }
 
   /// Internal helper to POST to the static /api/v1/artwork endpoint
-  Future<Map<String, dynamic>?> _fetchStaticArtworkPayload(String songName, String artistName) async {
+  Future<Map<String, dynamic>?> _fetchStaticArtworkPayload(
+      String songName, String artistName, String? albumName) async {
     try {
       final bodyBytes = utf8.encode(jsonEncode({
         'song_name': songName,
         'artist_name': artistName,
+        // Album is a strong disambiguator when the title and artist are not
+        // unique on their own. Omitted rather than faked when unknown.
+        if (albumName != null && albumName.isNotEmpty) 'album_name': albumName,
         'storefront': 'us',
         'width': 600,
         'height': 600,
@@ -174,7 +179,10 @@ class ArtworkService {
       final bodyBytes = utf8.encode(jsonEncode({
         'song_name': songName,
         'artist_name': artistName,
-        'album_name': (albumName != null && albumName.isNotEmpty) ? albumName : songName,
+        // Never substitute the song title for a missing album — that hands the
+        // API an actively wrong album and it will confidently pick the wrong
+        // cover. Omit the field instead so it can match on what it does have.
+        if (albumName != null && albumName.isNotEmpty) 'album_name': albumName,
         'storefront': 'us',
         'artwork_type': 'tall',
         'quality': 720,

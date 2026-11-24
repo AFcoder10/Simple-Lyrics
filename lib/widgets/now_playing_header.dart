@@ -1,10 +1,12 @@
 import 'package:simple_lyrics/core/font_fallbacks.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../core/settings_route.dart';
 import '../models/media_state.dart';
 import '../screens/settings_screen.dart';
 import '../services/media_session_service.dart';
 import '../services/settings_service.dart';
+import '../services/window_service.dart';
 import 'full_screen_artwork.dart';
 import 'animated_artwork_player.dart';
 
@@ -59,19 +61,43 @@ class NowPlayingHeader extends StatelessWidget {
                 ),
               ),
             ),
+            // Desktop window controls. Both are Windows-only: the window
+            // itself is what changes, and neither means anything on a phone.
+            if (WindowService.isSupported) ...[
+              IconButton(
+                onPressed: () => WindowService.toggleCompact(),
+                tooltip: 'Mini player (Ctrl+M)',
+                icon: Icon(
+                  WindowService.isCompact
+                      ? Icons.close_fullscreen_rounded
+                      : Icons.picture_in_picture_alt_rounded,
+                  color: Colors.white54,
+                  size: 22,
+                ),
+                visualDensity: VisualDensity.compact,
+                splashRadius: 24,
+              ),
+              IconButton(
+                onPressed: () => WindowService.toggleFullscreen(),
+                tooltip: 'Fullscreen (F11)',
+                icon: Icon(
+                  WindowService.isFullscreen
+                      ? Icons.fullscreen_exit_rounded
+                      : Icons.fullscreen_rounded,
+                  color: Colors.white54,
+                  size: 26,
+                ),
+                visualDensity: VisualDensity.compact,
+                splashRadius: 24,
+              ),
+            ],
             // Settings Button
             const SizedBox(width: 12),
             IconButton(
               onPressed: () {
-                Navigator.of(context).push(
-                  PageRouteBuilder(
-                    pageBuilder: (context, animation, secondaryAnimation) => SettingsScreen(service: service),
-                    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
-                    transitionDuration: const Duration(milliseconds: 300),
-                  ),
-                ).then((_) => onSettingsClosed?.call());
+                Navigator.of(context)
+                    .push(buildSettingsRoute(SettingsScreen(service: service)))
+                    .then((_) => onSettingsClosed?.call());
               },
               icon: const Icon(
                 Icons.settings_outlined,
@@ -111,7 +137,10 @@ class NowPlayingHeader extends StatelessWidget {
                 curve: Curves.easeOutCubic,
                 reverseCurve: Curves.easeInCubic,
               );
-              return FadeTransition(opacity: fadeAnimation, child: child);
+              return FadeTransition(
+                opacity: fadeAnimation,
+                child: RepaintBoundary(child: child),
+              );
             },
           ),
         );
@@ -120,23 +149,41 @@ class NowPlayingHeader extends StatelessWidget {
       child: Hero(
         tag: 'album_art',
         flightShuttleBuilder: (context, animation, direction, fromContext, toContext) {
-          // Cache the shadow to avoid recreating on every frame
           const shadow = BoxShadow(
             color: Color.fromARGB(64, 0, 0, 0),
             blurRadius: 16,
             offset: Offset(0, 8),
           );
-          
+
+          final flightArt = artBytes != null && artBytes.isNotEmpty
+              ? Image.memory(
+                  artBytes,
+                  fit: BoxFit.cover,
+                  cacheWidth: 512,
+                  cacheHeight: 512,
+                  gaplessPlayback: true,
+                )
+              : Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Colors.grey.shade800, Colors.grey.shade900],
+                    ),
+                  ),
+                  child: const Icon(Icons.music_note_rounded, color: Colors.white38),
+                );
+
           return Center(
             child: AspectRatio(
               aspectRatio: 1.0,
               child: RepaintBoundary(
                 child: AnimatedBuilder(
                   animation: animation,
-                  builder: (context, _) {
+                  child: flightArt,
+                  builder: (context, child) {
                     // Lerp radius between small (8) and large (12)
-                    final t = animation.value;
-                    final radius = 8.0 + (12.0 - 8.0) * t;
+                    final radius = 8.0 + (12.0 - 8.0) * animation.value;
 
                     return Container(
                       decoration: BoxDecoration(
@@ -144,51 +191,7 @@ class NowPlayingHeader extends StatelessWidget {
                         boxShadow: const [shadow],
                       ),
                       clipBehavior: Clip.antiAlias,
-                      child: SizedBox.expand(
-                        child: ValueListenableBuilder<bool>(
-                          valueListenable: SettingsService().animatedArtworkEnabled,
-                          builder: (context, enabled, _) {
-                            final hasSquareUrl = mediaState.squareMasterUrl != null && mediaState.squareMasterUrl!.isNotEmpty;
-                            final isLiveActive = enabled && hasSquareUrl;
-
-                            final placeholder = artBytes != null && artBytes.isNotEmpty
-                                ? Image.memory(
-                                    artBytes,
-                                    key: const ValueKey('static_art'),
-                                    fit: BoxFit.cover,
-                                    gaplessPlayback: true,
-                                  )
-                                : Container(
-                                    key: const ValueKey('static_placeholder'),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [Colors.grey.shade800, Colors.grey.shade900],
-                                      ),
-                                    ),
-                                    child: const Icon(Icons.music_note_rounded, color: Colors.white38),
-                                  );
-
-                            return AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 600),
-                              switchInCurve: Curves.easeIn,
-                              switchOutCurve: Curves.easeOut,
-                              child: isLiveActive
-                                  ? AnimatedArtworkPlayer(
-                                      key: ValueKey('live_art_${mediaState.squareMasterUrl}'),
-                                      url: mediaState.squareMasterUrl!,
-                                      placeholder: placeholder,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : SizedBox.expand(
-                                      key: const ValueKey('static_art_wrapper'),
-                                      child: placeholder,
-                                    ),
-                            );
-                          },
-                        ),
-                      ),
+                      child: SizedBox.expand(child: child),
                     );
                   },
                 ),

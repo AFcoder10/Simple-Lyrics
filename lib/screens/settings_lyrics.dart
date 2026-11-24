@@ -5,7 +5,10 @@ import '../services/settings_service.dart';
 /// Dedicated screen for lyrics-related settings.
 /// Includes font size, offset timing, and romanization options.
 class LyricsSettingsScreen extends StatelessWidget {
-  const LyricsSettingsScreen({super.key});
+  /// See [AppearanceSettingsScreen.embedded].
+  final bool embedded;
+
+  const LyricsSettingsScreen({super.key, this.embedded = false});
 
   @override
   Widget build(BuildContext context) {
@@ -13,7 +16,7 @@ class LyricsSettingsScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
-      appBar: AppBar(
+      appBar: embedded ? null : AppBar(
         backgroundColor: const Color(0xFF0A0A0A),
         elevation: 0,
         title: const Text(
@@ -72,7 +75,7 @@ class LyricsSettingsScreen extends StatelessWidget {
           // Lyrics Offset
           _buildSettingTile(
             title: 'Lyrics Offset',
-            subtitle: 'Sync lyrics timing (±10s in 50ms steps)',
+            subtitle: 'Adjust lyrics timing (ms)',
             icon: Icons.speed_rounded,
             trailing: ValueListenableBuilder<int>(
               valueListenable: settings.lyricsOffsetMs,

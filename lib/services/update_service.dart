@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
+import '../core/platform_capabilities.dart';
 import '../widgets/update_dialog.dart';
 
 class UpdateInfo {
@@ -68,6 +69,10 @@ class UpdateService {
 
   /// Downloads the APK and triggers the Android package installer.
   Future<void> downloadAndInstall(String url, Function(double) onProgress) async {
+    // The self-update flow ships an .apk and hands it to the Android package
+    // installer, neither of which applies on desktop.
+    if (!supportsApkUpdater) return;
+
     try {
       Directory? dir;
       if (Platform.isAndroid) {

@@ -62,6 +62,21 @@ class LyricsService {
 
     // 0. Exact raw metadata (highest chance of perfect match if it's correct)
     addQuery(songName, artistName);
+    // 0b. Plenty of players — browsers especially — only fill the title field,
+    // packing "Artist - Title" into it and leaving the artist empty. Query 0
+    // above then asks for a song whose *name* contains the artist, and the
+    // stripped variant below would ask for a song named after the artist.
+    // Split the packed form out as its own attempt.
+    if (cleanedArtist.isEmpty) {
+      final sep = cleanedSong.indexOf(' - ');
+      if (sep > 0 && sep + 3 < cleanedSong.length) {
+        final packedArtist = cleanedSong.substring(0, sep).trim();
+        final packedSong = cleanedSong.substring(sep + 3).trim();
+        if (packedArtist.isNotEmpty && packedSong.isNotEmpty) {
+          addQuery(packedSong, packedArtist);
+        }
+      }
+    }
     // 1. Cleaned metadata (preserves unicode like Señorita)
     addQuery(cleanedSong, cleanedArtist);
     // 2. Stripped decorations + primary artist only
@@ -153,13 +168,37 @@ class LyricsService {
         .trim();
   }
 
+  /// Release metadata that commonly trails a real title.
+  static final RegExp _junkTail = RegExp(
+    r'^(?:'
+    r'remaster(?:ed|ing)?\b.*|'
+    r'\d{4}\s*remaster(?:ed)?\b.*|'
+    r'mono\b.*|stereo\b.*|'
+    r'(?:single|album|radio|extended|club|original)\s+(?:version|edit)\b.*|'
+    r'deluxe\b.*|anniversary\b.*|expanded\b.*|edition\b.*|re-?issue\b.*|'
+    r'official\s+(?:music\s+)?video\b.*|lyric\s+video\b.*|'
+    r'music\s+video\b.*|visuali[sz]er\b.*|'
+    r'remix(?:ed)?\b.*'
+    r')$',
+    caseSensitive: false,
+  );
+
   String _stripDecorations(String value) {
-    return value
+    var out = value
         .replaceAll(RegExp(r'\([^)]*\)|\[[^]]*\]'), '') // Strip (Official Video), [Remix], etc.
-        .replaceAll(RegExp(r'\s+-\s+.*$'), '') // Strip - Remastered, etc.
         .replaceAll(RegExp(r'\b(feat|ft|featuring)\.?\b.*', caseSensitive: false), '')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
+
+    // Only drop what trails a " - " when it reads as release metadata. The
+    // blanket strip this replaced destroyed real titles containing " - " and,
+    // worse, turned a packed "Artist - Song" into just "Artist" — which then
+    // matched an entirely different song.
+    final sep = out.lastIndexOf(' - ');
+    if (sep > 0 && _junkTail.hasMatch(out.substring(sep + 3))) {
+      out = out.substring(0, sep).trim();
+    }
+    return out;
   }
 
   String _primaryArtist(String value) {

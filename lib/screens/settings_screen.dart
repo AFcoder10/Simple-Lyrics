@@ -1,6 +1,7 @@
 import 'package:simple_lyrics/core/font_fallbacks.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../core/settings_route.dart';
 import '../services/media_session_service.dart';
 import 'settings_appearance.dart';
 import 'settings_lyrics.dart';
@@ -160,15 +161,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       child: ListTile(
         onTap: () {
-          Navigator.of(context).push(
-            PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => page,
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-              transitionDuration: const Duration(milliseconds: 300),
-            ),
-          );
+          Navigator.of(context).push(buildSettingsRoute(page));
         },
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         leading: Container(

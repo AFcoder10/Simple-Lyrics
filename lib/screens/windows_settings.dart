@@ -40,7 +40,7 @@ Future<void> showWindowsSettings(
     barrierDismissible: true,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     barrierColor: Colors.black.withValues(alpha: 0.60),
-    transitionDuration: const Duration(milliseconds: 520),
+    transitionDuration: const Duration(milliseconds: 340),
     pageBuilder: (context, animation, secondaryAnimation) =>
         WindowsSettings(service: service),
     transitionBuilder: (context, animation, secondaryAnimation, child) {
@@ -49,6 +49,7 @@ Future<void> showWindowsSettings(
         secondaryAnimation: secondaryAnimation,
         child: child,
         includeSecondary: false,
+        compact: true,
       );
     },
   );
@@ -153,14 +154,29 @@ class _WindowsSettingsState extends State<WindowsSettings> {
           child: Row(
             children: [
               Expanded(
-                child: Text(
-                  _section.label,
-                  style: const TextStyle(
-                    fontFamily: 'Display',
-                    fontFamilyFallback: kGlobalFontFallbacks,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 160),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  layoutBuilder: (currentChild, previousChildren) {
+                    return Stack(
+                      alignment: Alignment.centerLeft,
+                      children: [
+                        ...previousChildren,
+                        ?currentChild,
+                      ],
+                    );
+                  },
+                  child: Text(
+                    _section.label,
+                    key: ValueKey(_section),
+                    style: const TextStyle(
+                      fontFamily: 'Display',
+                      fontFamilyFallback: kGlobalFontFallbacks,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
@@ -177,7 +193,23 @@ class _WindowsSettingsState extends State<WindowsSettings> {
           ),
         ),
         Container(height: 1, color: Colors.white.withValues(alpha: 0.07)),
-        Expanded(child: _buildSection()),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: child,
+              );
+            },
+            child: KeyedSubtree(
+              key: ValueKey(_section),
+              child: _buildSection(),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -229,15 +261,21 @@ class _NavTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      child: Material(
-        color: selected
-            ? Colors.white.withValues(alpha: 0.10)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
-        child: InkWell(
-          onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: selected
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
-          hoverColor: Colors.white.withValues(alpha: 0.06),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(6),
+            hoverColor: Colors.white.withValues(alpha: 0.06),
           child: SizedBox(
             height: 40,
             child: Row(
@@ -268,7 +306,8 @@ class _NavTile extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }
 

@@ -80,6 +80,7 @@ class _CompactPlayerState extends State<CompactPlayer> {
         return BackgroundController(
           albumArtBytes: widget.mediaState.albumArtBytes,
           forceStatic: performanceMode,
+          isPlaying: widget.mediaState.isPlaying,
         );
       },
     );

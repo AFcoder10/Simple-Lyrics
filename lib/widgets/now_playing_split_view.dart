@@ -97,6 +97,7 @@ class _NowPlayingSplitViewState extends State<NowPlayingSplitView> {
         return BackgroundController(
           albumArtBytes: widget.mediaState.albumArtBytes,
           forceStatic: performanceMode,
+          isPlaying: widget.mediaState.isPlaying,
         );
       },
     );

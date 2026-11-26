@@ -56,9 +56,20 @@ class _StaticAcrylicOverlayState extends State<StaticAcrylicOverlay> {
           return Stack(
             fit: StackFit.expand,
             children: [
-              // Tint Layer
-              Container(
-                color: Colors.black.withValues(alpha: 0.15),
+              // Subtle diagonal frosted-glass sheen & contrast tint (static, 0 cost).
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0x14FFFFFF),
+                      Color(0x26000000),
+                      Color(0x33000000),
+                    ],
+                    stops: [0.0, 0.45, 1.0],
+                  ),
+                ),
               ),
               // Texture Layer
               if (_cachedFineGrain != null)

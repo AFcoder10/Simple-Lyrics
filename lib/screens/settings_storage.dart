@@ -169,40 +169,46 @@ class StorageCacheSettingsScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
-      child: ListTile(
-        onTap: onTap,
-        enabled: enabled,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: (isDestructive ? Colors.redAccent : Colors.white).withValues(alpha: 0.05),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: isDestructive ? Colors.redAccent.withValues(alpha: 0.7) : Colors.white70, size: 24),
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: enabled ? Colors.white : Colors.white24,
-            fontSize: 17,
-            fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
-            fontWeight: FontWeight(1000),
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            subtitle,
-            style: TextStyle(
-              color: enabled ? Colors.white.withValues(alpha: 0.5) : Colors.white10,
-              fontSize: 14,
-              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
-              fontWeight: FontWeight.w400,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Material(
+          type: MaterialType.transparency,
+          child: ListTile(
+            onTap: onTap,
+            enabled: enabled,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            leading: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: (isDestructive ? Colors.redAccent : Colors.white).withValues(alpha: 0.05),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: isDestructive ? Colors.redAccent.withValues(alpha: 0.7) : Colors.white70, size: 24),
             ),
+            title: Text(
+              title,
+              style: TextStyle(
+                color: enabled ? Colors.white : Colors.white24,
+                fontSize: 17,
+                fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                fontWeight: FontWeight(1000),
+              ),
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                subtitle,
+                style: TextStyle(
+                  color: enabled ? Colors.white.withValues(alpha: 0.5) : Colors.white10,
+                  fontSize: 14,
+                  fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+            trailing: Icon(Icons.chevron_right_rounded, color: enabled ? Colors.white24 : Colors.transparent),
           ),
         ),
-        trailing: Icon(Icons.chevron_right_rounded, color: enabled ? Colors.white24 : Colors.transparent),
       ),
     );
   }

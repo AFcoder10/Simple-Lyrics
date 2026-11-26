@@ -50,13 +50,18 @@ class LyricsSettingsScreen extends StatelessWidget {
                     Container(
                       width: 40,
                       alignment: Alignment.center,
-                      child: Text(
-                        size.toInt().toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 120),
+                        switchInCurve: Curves.easeOutCubic,
+                        child: Text(
+                          size.toInt().toString(),
+                          key: ValueKey(size.toInt()),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                          ),
                         ),
                       ),
                     ),
@@ -98,13 +103,18 @@ class LyricsSettingsScreen extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            offset.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 120),
+                            switchInCurve: Curves.easeOutCubic,
+                            child: Text(
+                              offset.toString(),
+                              key: ValueKey(offset),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                              ),
                             ),
                           ),
                           Text(
@@ -163,18 +173,23 @@ class LyricsSettingsScreen extends StatelessWidget {
     required VoidCallback onTap,
     required bool enabled,
   }) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: enabled ? 0.1 : 0.02),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          icon,
-          color: enabled ? Colors.white70 : Colors.white10,
-          size: 20,
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: enabled ? 0.1 : 0.02),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            icon,
+            color: enabled ? Colors.white70 : Colors.white10,
+            size: 20,
+          ),
         ),
       ),
     );

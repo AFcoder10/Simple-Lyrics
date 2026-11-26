@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../core/platform_capabilities.dart';
 import '../models/media_state.dart';
 import '../services/media_session_service.dart';
+import '../services/playback_clock.dart';
 import '../services/settings_service.dart';
 import 'animated_artwork_player.dart';
 import 'playback_controls.dart';
@@ -36,11 +38,12 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
   with TickerProviderStateMixin {
   late MediaState _mediaState;
   final ValueNotifier<Duration> _visualPositionNotifier = ValueNotifier<Duration>(Duration.zero);
-  DateTime _lastPositionTick = DateTime.now();
+  late final PlaybackClock _clock = PlaybackClock(nativeLag: defaultNativeLag);
+  VoidCallback? _seekRequestedListener;
+  VoidCallback? _advancingRequestedListener;
   late final Ticker _positionTicker;
   late final AnimationController _entryController;
   StreamSubscription<MediaState>? _subscription;
-  bool _isPreviewingPosition = false;
 
   // State variables for delayed dark overlay when live artwork is active
   bool _showLiveOverlayDarkFade = false;
@@ -53,13 +56,44 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
   void initState() {
     super.initState();
     _mediaState = widget.mediaState;
-    _visualPositionNotifier.value = widget.mediaState.position;
+    final seedPosition = widget.service.displayPosition > Duration.zero &&
+            defaultNativeLag == Duration.zero &&
+            (_mediaState.duration <= Duration.zero ||
+                widget.service.displayPosition <= _mediaState.duration)
+        ? widget.service.displayPosition
+        : _mediaState.position;
+    _clock.sync(
+      position: seedPosition,
+      isPlaying: _mediaState.isAdvancing,
+      duration: _mediaState.duration,
+      playbackRate: _mediaState.playbackRate,
+      songChanged: true,
+    );
+    _visualPositionNotifier.value = _clock.position;
     _positionTicker = createTicker((_) => _tickVisualPosition())..start();
     _entryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 550),
     )..forward();
     _subscription = widget.service.mediaStateStream.listen(_onMediaStateUpdate);
+
+    _seekRequestedListener = () {
+      final target = widget.service.seekRequested.value;
+      if (target != null && mounted) {
+        _clock.beginSeek(target);
+        _visualPositionNotifier.value = _clock.position;
+      }
+    };
+    widget.service.seekRequested.addListener(_seekRequestedListener!);
+
+    _advancingRequestedListener = () {
+      final advancing = widget.service.advancingRequested.value;
+      if (advancing != null && mounted) {
+        _clock.setAdvancing(advancing);
+        _visualPositionNotifier.value = _clock.position;
+      }
+    };
+    widget.service.advancingRequested.addListener(_advancingRequestedListener!);
     
     // Listen to changes in settings for animated artwork
     SettingsService().animatedArtworkEnabled.addListener(_onSettingsChanged);
@@ -85,39 +119,32 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
   void _onMediaStateUpdate(MediaState state) {
     if (!mounted) return;
     final previousState = _mediaState;
+    final songChanged = state.title != previousState.title ||
+        state.artist != previousState.artist;
+
     setState(() {
       _mediaState = state;
     });
 
-    // Sync position if it drifts too much or if song changes
-    final delta = (state.position.inMilliseconds - _visualPositionNotifier.value.inMilliseconds).abs();
-    final songChanged = state.title != previousState.title ||
-        state.artist != previousState.artist;
-    
-    if (delta > 1000 || songChanged) {
-      _visualPositionNotifier.value = state.position;
+    if (state.isEmpty) {
+      _clock.reset();
+    } else {
+      _clock.sync(
+        position: state.position,
+        isPlaying: state.isAdvancing,
+        duration: state.duration,
+        playbackRate: state.playbackRate,
+        songChanged: songChanged,
+      );
     }
+    _visualPositionNotifier.value = _clock.position;
 
     _updateLiveOverlayTimer(forceReset: songChanged);
   }
 
   void _tickVisualPosition() {
-    final now = DateTime.now();
-    final elapsed = now.difference(_lastPositionTick);
-    _lastPositionTick = now;
-
-    if (_isPreviewingPosition || !_mediaState.isPlaying || _mediaState.isEmpty) {
-      return;
-    }
-
-    final duration = _mediaState.duration;
-    final nextPosition = duration > Duration.zero &&
-            _visualPositionNotifier.value + elapsed > duration
-        ? duration
-        : _visualPositionNotifier.value + elapsed;
-
+    final nextPosition = _clock.position;
     if (nextPosition == _visualPositionNotifier.value) return;
-
     _visualPositionNotifier.value = nextPosition;
   }
 
@@ -127,13 +154,32 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
         ? duration
         : position;
 
-    _visualPositionNotifier.value = clampedPosition;
-    _lastPositionTick = DateTime.now();
+    if (!_clock.previewing) _clock.beginPreview();
+    _clock.updatePreview(clampedPosition);
+    _visualPositionNotifier.value = _clock.position;
+  }
+
+  void _setPositionPreviewing(bool isPreviewing) {
+    if (isPreviewing) {
+      _clock.beginPreview();
+    } else {
+      _clock.endPreview();
+    }
+    _visualPositionNotifier.value = _clock.position;
   }
 
   @override
   void dispose() {
     SettingsService().animatedArtworkEnabled.removeListener(_onSettingsChanged);
+    if (_seekRequestedListener != null) {
+      widget.service.seekRequested.removeListener(_seekRequestedListener!);
+      _seekRequestedListener = null;
+    }
+    if (_advancingRequestedListener != null) {
+      widget.service.advancingRequested
+          .removeListener(_advancingRequestedListener!);
+      _advancingRequestedListener = null;
+    }
     _liveOverlayDelayTimer?.cancel();
     _immersiveTimer?.cancel();
     _positionTicker.dispose();
@@ -622,8 +668,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
             visible: true,
             onInteraction: () {},
             onPositionPreview: _previewVisualPosition,
-            onPositionPreviewing: (val) =>
-                setState(() => _isPreviewingPosition = val),
+            onPositionPreviewing: _setPositionPreviewing,
             transparentBackground: true,
           ),
         ],
@@ -700,8 +745,7 @@ class _FullScreenArtworkState extends State<FullScreenArtwork>
               visible: true,
               onInteraction: () {},
               onPositionPreview: _previewVisualPosition,
-              onPositionPreviewing: (val) =>
-                  setState(() => _isPreviewingPosition = val),
+              onPositionPreviewing: _setPositionPreviewing,
               transparentBackground: false,
             ),
           ),

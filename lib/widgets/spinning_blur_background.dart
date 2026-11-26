@@ -13,10 +13,12 @@ import '../services/settings_service.dart';
 /// so there are no rectangular layer bounds to leak into the animation.
 class SpinningBlurBackground extends StatefulWidget {
   final Uint8List? albumArtBytes;
+  final bool isPlaying;
 
   const SpinningBlurBackground({
     super.key,
     required this.albumArtBytes,
+    this.isPlaying = true,
   });
 
   @override
@@ -28,22 +30,35 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
   late final Ticker _spinTicker;
   final ValueNotifier<double> _spinPhase = ValueNotifier<double>(0.0);
   Duration _lastSpinElapsed = Duration.zero;
+  double _playMomentum = 1.0;
   late final AnimationController _fadeController;
 
+  ui.Image? _cachedVibrantImage;
   ui.Image? _currentImage;
   ui.Image? _previousImage;
   int _artworkGeneration = 0;
+  int _blurGeneration = 0;
+  Timer? _blurDebounceTimer;
   late final _MotionSeed _motion;
 
   @override
   void initState() {
     super.initState();
+    _playMomentum = widget.isPlaying ? 1.0 : 0.14;
     _spinTicker = createTicker((elapsed) {
       final dt = (elapsed - _lastSpinElapsed).inMicroseconds / 1e6;
       _lastSpinElapsed = elapsed;
       if (dt <= 0 || dt > 0.25) return;
+
+      final targetMomentum = widget.isPlaying ? 1.0 : 0.14;
+      final damp = 1.0 - math.exp(-dt * 2.4);
+      _playMomentum += (targetMomentum - _playMomentum) * damp;
+      if ((targetMomentum - _playMomentum).abs() < 0.002) {
+        _playMomentum = targetMomentum;
+      }
+
       final speed = SettingsService().blurAnimationSpeed.value.clamp(0.1, 10.0);
-      _spinPhase.value += dt * (speed / 26.0);
+      _spinPhase.value += dt * (speed / 26.0) * _playMomentum;
     })..start();
 
     _motion = _MotionSeed.random();
@@ -62,16 +77,26 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
   @override
   void dispose() {
     SettingsService().blurIntensity.removeListener(_onBlurIntensityChanged);
+    _blurDebounceTimer?.cancel();
     _spinTicker.dispose();
     _spinPhase.dispose();
     _fadeController.dispose();
+    _cachedVibrantImage?.dispose();
     _currentImage?.dispose();
     _previousImage?.dispose();
     super.dispose();
   }
 
   void _onBlurIntensityChanged() {
-    _updateArtworkImage(); // Re-blur with new intensity
+    _blurDebounceTimer?.cancel();
+    _blurDebounceTimer = Timer(const Duration(milliseconds: 70), () {
+      if (!mounted) return;
+      if (_cachedVibrantImage != null) {
+        _reblurCachedVibrant();
+      } else {
+        _updateArtworkImage();
+      }
+    });
   }
 
   @override
@@ -82,19 +107,16 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
     }
   }
 
-  /// Pre-blur the image so the painter never needs a GPU ImageFilter.
-  /// First boosts saturation and contrast, then two passes at
-  /// high sigma produce the deep, diffuse, vibrant blur for the background.
-  Future<ui.Image> _preBlurImage(ui.Image source) async {
-    final w = source.width;
-    final h = source.height;
+  /// Runs the two-pass blur directly on an already tone-mapped [vibrant]
+  /// image without disposing [vibrant], so blur slider changes skip decode and
+  /// pixel tone-mapping entirely.
+  Future<ui.Image> _preBlurFromVibrant(ui.Image vibrant, double sigma) async {
+    final w = vibrant.width;
+    final h = vibrant.height;
     final rect = Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble());
 
-    final vibrant = await _createVibrantHighlightSafeImage(source);
-    final double sigma = SettingsService().blurIntensity.value;
-
     if (sigma <= 0.05) {
-      return vibrant;
+      return _copyImage(vibrant);
     }
 
     // --- Pass 1: heavy blur ---
@@ -113,7 +135,6 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
     final p1 = r1.endRecording();
     final pass1 = await p1.toImage(w, h);
     p1.dispose();
-    vibrant.dispose();
 
     // --- Pass 2: second blur pass for deeper diffusion ---
     final r2 = ui.PictureRecorder();
@@ -140,83 +161,9 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
     final byteData = await source.toByteData(format: ui.ImageByteFormat.rawRgba);
     if (byteData == null) return _copyImage(source);
 
-    final pixels = Uint8List.fromList(byteData.buffer.asUint8List());
-    final pixelCount = pixels.length ~/ 4;
-
-    // Measure average cover brightness so dark covers keep their full glow
-    // while bright/white/pastel covers get stronger highlight compression.
-    double totalLuma = 0.0;
-    for (int i = 0; i < pixels.length; i += 4) {
-      totalLuma += _luma(
-        pixels[i] / 255.0,
-        pixels[i + 1] / 255.0,
-        pixels[i + 2] / 255.0,
-      );
-    }
-    final avgLuma = pixelCount > 0 ? totalLuma / pixelCount : 0.3;
-    final brightFactor = _smoothstep(0.22, 0.65, avgLuma);
-    final lumaCeiling = _lerpDouble(0.60, 0.48, brightFactor);
-
-    for (int i = 0; i < pixels.length; i += 4) {
-      final or = pixels[i] / 255.0;
-      final og = pixels[i + 1] / 255.0;
-      final ob = pixels[i + 2] / 255.0;
-
-      final luma = _luma(or, og, ob);
-      final maxc = or > og ? (or > ob ? or : ob) : (og > ob ? og : ob);
-      final minc = or < og ? (or < ob ? or : ob) : (og < ob ? og : ob);
-      final chroma = maxc - minc;
-
-      // Near-gray, near-black and near-white pixels stay neutral. Vibrance
-      // only boosts colorful pixels so album whites/blacks don't gain a tint.
-      final toneProtect = _smoothstep(0.04, 0.14, luma) *
-          (1.0 - _smoothstep(0.86, 0.96, luma));
-      final colorProtect = _smoothstep(0.03, 0.14, chroma);
-      final protect = toneProtect * colorProtect;
-
-      // Rich vibrance boost (slightly stronger on bright pastel covers so
-      // compressed highlights turn into deep jewel tones instead of gray).
-      final vibrance = 1.0 + ((1.45 + 0.35 * brightFactor) * (1.0 - chroma) * protect);
-
-      var r = _clamp01(luma + (or - luma) * vibrance);
-      var g = _clamp01(luma + (og - luma) * vibrance);
-      var b = _clamp01(luma + (ob - luma) * vibrance);
-
-      // Restore original luma first, then apply midtone contrast + soft-knee
-      // highlight compression so lyrics stay readable over bright covers.
-      var newLuma = _luma(r, g, b);
-      if (newLuma > 1e-5) {
-        final scale = luma / newLuma;
-        r = _clamp01(r * scale);
-        g = _clamp01(g * scale);
-        b = _clamp01(b * scale);
-      }
-
-      final contrasted = _midtoneContrast(luma, 0.28 * protect);
-      final targetLuma = _compressHighlights(contrasted, 0.26, lumaCeiling);
-      if (luma > 1e-5) {
-        final scale = targetLuma / luma;
-        r = _clamp01(r * scale);
-        g = _clamp01(g * scale);
-        b = _clamp01(b * scale);
-      }
-
-      pixels[i] = (_clamp01(r) * 255).round();
-      pixels[i + 1] = (_clamp01(g) * 255).round();
-      pixels[i + 2] = (_clamp01(b) * 255).round();
-    }
-
-    return _decodeRgbaImage(pixels, source.width, source.height);
-  }
-
-  /// Soft-knee roll-off above [knee] so bright areas never blow out to blinding
-  /// white behind lyrics while keeping rich hues intact.
-  double _compressHighlights(double x, double knee, double ceiling) {
-    if (x <= knee) return x;
-    final headroom = (ceiling - knee).clamp(0.05, 1.0);
-    final normalized = ((x - knee) / (1.0 - knee)).clamp(0.0, 1.0);
-    final compressed = 1.0 - math.pow(1.0 - normalized, 2.2);
-    return knee + headroom * compressed;
+    final inputBytes = Uint8List.fromList(byteData.buffer.asUint8List());
+    final processed = await compute(_processVibrantRgbaBytes, inputBytes);
+    return _decodeRgbaImage(processed, source.width, source.height);
   }
 
   Future<ui.Image> _copyImage(ui.Image source) async {
@@ -247,25 +194,28 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
     return completer.future;
   }
 
-  double _luma(double r, double g, double b) {
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  }
+  Future<void> _reblurCachedVibrant() async {
+    final vibrant = _cachedVibrantImage;
+    if (vibrant == null) return;
 
-  double _clamp01(double value) => value.clamp(0.0, 1.0).toDouble();
+    final blurGen = ++_blurGeneration;
+    final artGen = _artworkGeneration;
 
-  double _lerpDouble(double a, double b, double t) => a + (b - a) * t;
-
-  double _smoothstep(double edge0, double edge1, double x) {
-    final t = _clamp01((x - edge0) / (edge1 - edge0));
-    return t * t * (3.0 - 2.0 * t);
-  }
-
-  /// Contrast curve that is exactly identity at 0 and 1, so blacks and whites
-  /// do not move. [amount] 0 = original, 1 = full smoothstep.
-  double _midtoneContrast(double x, double amount) {
-    if (amount <= 0) return x;
-    final curved = x * x * (3.0 - 2.0 * x);
-    return _lerpDouble(x, curved, amount.clamp(0.0, 1.0));
+    try {
+      final sigma = SettingsService().blurIntensity.value;
+      final blurred = await _preBlurFromVibrant(vibrant, sigma);
+      if (!mounted || artGen != _artworkGeneration || blurGen != _blurGeneration) {
+        blurred.dispose();
+        return;
+      }
+      final oldCurrent = _currentImage;
+      setState(() {
+        _currentImage = blurred;
+      });
+      oldCurrent?.dispose();
+    } catch (e) {
+      // Keep the existing image if blur fails mid-drag.
+    }
   }
 
   Future<void> _updateArtworkImage() async {
@@ -274,6 +224,7 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
     }
 
     final gen = ++_artworkGeneration;
+    final blurGen = ++_blurGeneration;
 
     try {
       final ui.Codec codec = await ui.instantiateImageCodec(
@@ -289,13 +240,24 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
         return;
       }
 
-      // Pre-blur the image so the painter just draws an already-blurred bitmap.
-      final ui.Image blurredImage = await _preBlurImage(rawImage);
-      rawImage.dispose(); // no longer needed
+      final ui.Image vibrant = await _createVibrantHighlightSafeImage(rawImage);
+      rawImage.dispose();
       if (!mounted || gen != _artworkGeneration) {
+        vibrant.dispose();
+        return;
+      }
+
+      final sigma = SettingsService().blurIntensity.value;
+      final ui.Image blurredImage = await _preBlurFromVibrant(vibrant, sigma);
+      if (!mounted || gen != _artworkGeneration || blurGen != _blurGeneration) {
+        vibrant.dispose();
         blurredImage.dispose();
         return;
       }
+
+      final oldVibrant = _cachedVibrantImage;
+      _cachedVibrantImage = vibrant;
+      oldVibrant?.dispose();
 
       // IMPORTANT: set fade to 0 BEFORE updating images in setState,
       // so the painter never sees the new image at full opacity for a frame.
@@ -326,45 +288,49 @@ class _SpinningBlurBackgroundState extends State<SpinningBlurBackground>
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
-      child: LayoutBuilder(builder: (context, constraints) {
-        return AnimatedBuilder(
-          animation: _fadeController,
-          builder: (context, child) {
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                CustomPaint(
-                  size: Size(constraints.maxWidth, constraints.maxHeight),
-                  painter: _ArtworkBackgroundPainter(
-                    animation: _spinPhase,
-                    currentImage: _currentImage,
-                    previousImage: _previousImage,
-                    crossfade: _fadeController.value,
-                    motion: _motion,
-                  ),
-                ),
-                // Subtle contrast vignette: keeps the center colors glowing while
-                // giving top/bottom dimmed lyrics lines extra contrast.
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.22),
-                        Colors.black.withValues(alpha: 0.08),
-                        Colors.black.withValues(alpha: 0.08),
-                        Colors.black.withValues(alpha: 0.24),
-                      ],
-                      stops: const [0.0, 0.28, 0.72, 1.0],
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return AnimatedBuilder(
+                animation: _fadeController,
+                builder: (context, child) {
+                  return CustomPaint(
+                    size: Size(constraints.maxWidth, constraints.maxHeight),
+                    painter: _ArtworkBackgroundPainter(
+                      animation: _spinPhase,
+                      currentImage: _currentImage,
+                      previousImage: _previousImage,
+                      crossfade: _fadeController.value,
+                      motion: _motion,
                     ),
-                  ),
+                  );
+                },
+              );
+            },
+          ),
+          // Subtle contrast vignette: keeps the center colors glowing while
+          // giving top/bottom dimmed lyrics lines extra contrast.
+          const IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0x38000000),
+                    Color(0x14000000),
+                    Color(0x14000000),
+                    Color(0x3D000000),
+                  ],
+                  stops: [0.0, 0.28, 0.72, 1.0],
                 ),
-              ],
-            );
-          },
-        );
-      }),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -397,6 +363,17 @@ class _ArtworkBackgroundPainter extends CustomPainter {
   final double crossfade;
   final _MotionSeed motion;
 
+  final Paint _layerPaint = Paint()
+    ..filterQuality = FilterQuality.medium
+    ..isAntiAlias = true;
+
+  final Paint _accentPaint = Paint()
+    ..filterQuality = FilterQuality.medium
+    ..isAntiAlias = true
+    ..blendMode = BlendMode.plus;
+
+  final Paint _fallbackPaint = Paint()..color = const Color(0xFF0A0A0A);
+
   _ArtworkBackgroundPainter({
     required this.animation,
     required this.currentImage,
@@ -418,12 +395,12 @@ class _ArtworkBackgroundPainter extends CustomPainter {
     final hasPrevious = previousImage != null;
 
     if (!hasCurrent && !hasPrevious) {
-      canvas.drawRect(
-        Offset.zero & size,
-        Paint()..color = const Color(0xFF0A0A0A),
-      );
+      canvas.drawRect(Offset.zero & size, _fallbackPaint);
       return;
     }
+
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
 
     if (hasPrevious && crossfade < 1.0) {
       _drawImage(canvas, size, previousImage!, (1.0 - crossfade).clamp(0.0, 1.0));
@@ -433,6 +410,8 @@ class _ArtworkBackgroundPainter extends CustomPainter {
       final opacity = hasPrevious ? crossfade.clamp(0.0, 1.0) : 1.0;
       _drawImage(canvas, size, currentImage!, opacity);
     }
+
+    canvas.restore();
   }
 
   void _drawImage(Canvas canvas, Size size, ui.Image image, double opacity) {
@@ -487,12 +466,13 @@ class _ArtworkBackgroundPainter extends CustomPainter {
     // Gentle scale breathing (>= 1.0 so corners remain strictly covered).
     final breath1 = 1.0 + 0.08 * (0.5 + 0.5 * math.sin(t * 0.67 + motion.xPhase[0]));
     final breath2 = 1.04 + 0.10 * (0.5 + 0.5 * math.cos(t * 0.53 + motion.yPhase[1]));
+    final breath3 = 1.16 + 0.10 * (0.5 + 0.5 * math.sin(t * 0.37 + motion.xPhase[2]));
 
     final center = Offset(size.width / 2, size.height / 2);
 
     // Base drifting layer
+    _layerPaint.color = Color.fromRGBO(255, 255, 255, opacity);
     canvas.save();
-    canvas.clipRect(Offset.zero & size);
     canvas.translate(
       center.dx + rawDx1 * panBudget,
       center.dy + rawDy1 * panBudget,
@@ -500,19 +480,12 @@ class _ArtworkBackgroundPainter extends CustomPainter {
     canvas.rotate(angle1);
     canvas.scale(baseScale * breath1, baseScale * breath1);
     canvas.translate(-imgW / 2, -imgH / 2);
-    canvas.drawImage(
-      image,
-      Offset.zero,
-      Paint()
-        ..filterQuality = FilterQuality.medium
-        ..isAntiAlias = true
-        ..color = Color.fromRGBO(255, 255, 255, opacity),
-    );
+    canvas.drawImage(image, Offset.zero, _layerPaint);
     canvas.restore();
 
     // Counter-moving mirrored layer so color blobs morph organically
+    _layerPaint.color = Color.fromRGBO(255, 255, 255, (opacity * 0.42).clamp(0.0, 1.0));
     canvas.save();
-    canvas.clipRect(Offset.zero & size);
     canvas.translate(
       center.dx + rawDx2 * panBudget,
       center.dy + rawDy2 * panBudget,
@@ -520,14 +493,20 @@ class _ArtworkBackgroundPainter extends CustomPainter {
     canvas.rotate(angle2);
     canvas.scale(-baseScale * breath2, baseScale * breath2);
     canvas.translate(-imgW / 2, -imgH / 2);
-    canvas.drawImage(
-      image,
-      Offset.zero,
-      Paint()
-        ..filterQuality = FilterQuality.medium
-        ..isAntiAlias = true
-        ..color = Color.fromRGBO(255, 255, 255, (opacity * 0.42).clamp(0.0, 1.0)),
+    canvas.drawImage(image, Offset.zero, _layerPaint);
+    canvas.restore();
+
+    // Soft additive chromatic pool floating higher behind the active lyrics
+    _accentPaint.color = Color.fromRGBO(255, 255, 255, (opacity * 0.12).clamp(0.0, 1.0));
+    canvas.save();
+    canvas.translate(
+      center.dx - rawDx2 * (panBudget * 0.7),
+      size.height * 0.38 + rawDy1 * (panBudget * 0.65),
     );
+    canvas.rotate(angle1 * 0.55 + 2.2);
+    canvas.scale(baseScale * breath3, baseScale * breath3);
+    canvas.translate(-imgW / 2, -imgH / 2);
+    canvas.drawImage(image, Offset.zero, _accentPaint);
     canvas.restore();
   }
 
@@ -539,4 +518,95 @@ class _ArtworkBackgroundPainter extends CustomPainter {
         oldDelegate.crossfade != crossfade ||
         oldDelegate.motion != motion;
   }
+}
+
+/// Top-level isolate worker that boosts vibrance and compresses highlights on a
+/// 128x128 RGBA image without stalling the main UI thread.
+Uint8List _processVibrantRgbaBytes(Uint8List pixels) {
+  final pixelCount = pixels.length ~/ 4;
+
+  double totalLuma = 0.0;
+  for (int i = 0; i < pixels.length; i += 4) {
+    totalLuma += _luma(
+      pixels[i] / 255.0,
+      pixels[i + 1] / 255.0,
+      pixels[i + 2] / 255.0,
+    );
+  }
+  final avgLuma = pixelCount > 0 ? totalLuma / pixelCount : 0.3;
+  final brightFactor = _smoothstep(0.22, 0.65, avgLuma);
+  final lumaCeiling = _lerpDouble(0.60, 0.48, brightFactor);
+
+  for (int i = 0; i < pixels.length; i += 4) {
+    final or = pixels[i] / 255.0;
+    final og = pixels[i + 1] / 255.0;
+    final ob = pixels[i + 2] / 255.0;
+
+    final luma = _luma(or, og, ob);
+    final maxc = or > og ? (or > ob ? or : ob) : (og > ob ? og : ob);
+    final minc = or < og ? (or < ob ? or : ob) : (og < ob ? og : ob);
+    final chroma = maxc - minc;
+
+    final toneProtect = _smoothstep(0.04, 0.14, luma) *
+        (1.0 - _smoothstep(0.86, 0.96, luma));
+    final colorProtect = _smoothstep(0.03, 0.14, chroma);
+    final protect = toneProtect * colorProtect;
+
+    final vibrance =
+        1.0 + ((1.45 + 0.35 * brightFactor) * (1.0 - chroma) * protect);
+
+    var r = _clamp01(luma + (or - luma) * vibrance);
+    var g = _clamp01(luma + (og - luma) * vibrance);
+    var b = _clamp01(luma + (ob - luma) * vibrance);
+
+    final newLuma = _luma(r, g, b);
+    if (newLuma > 1e-5) {
+      final scale = luma / newLuma;
+      r = _clamp01(r * scale);
+      g = _clamp01(g * scale);
+      b = _clamp01(b * scale);
+    }
+
+    final contrasted = _midtoneContrast(luma, 0.28 * protect);
+    final targetLuma = _compressHighlights(contrasted, 0.26, lumaCeiling);
+    if (luma > 1e-5) {
+      final scale = targetLuma / luma;
+      r = _clamp01(r * scale);
+      g = _clamp01(g * scale);
+      b = _clamp01(b * scale);
+    }
+
+    pixels[i] = (_clamp01(r) * 255).round();
+    pixels[i + 1] = (_clamp01(g) * 255).round();
+    pixels[i + 2] = (_clamp01(b) * 255).round();
+  }
+
+  return pixels;
+}
+
+double _compressHighlights(double x, double knee, double ceiling) {
+  if (x <= knee) return x;
+  final headroom = (ceiling - knee).clamp(0.05, 1.0);
+  final normalized = ((x - knee) / (1.0 - knee)).clamp(0.0, 1.0);
+  final compressed = 1.0 - math.pow(1.0 - normalized, 2.2);
+  return knee + headroom * compressed;
+}
+
+double _luma(double r, double g, double b) {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+double _clamp01(double value) => value.clamp(0.0, 1.0).toDouble();
+
+double _lerpDouble(double a, double b, double t) => a + (b - a) * t;
+
+double _smoothstep(double edge0, double edge1, double x) {
+  final t = _clamp01((x - edge0) / (edge1 - edge0));
+  return t * t * (3.0 - 2.0 * t);
+}
+
+double _midtoneContrast(double x, double amount) {
+  if (amount <= 0) return x;
+  final curved = x * x * (3.0 - 2.0 * x);
+  return _lerpDouble(x, curved, amount.clamp(0.0, 1.0));
 }

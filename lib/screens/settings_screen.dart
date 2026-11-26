@@ -21,6 +21,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isCheckingForUpdate = false;
+  late final Future<PackageInfo> _packageInfoFuture = PackageInfo.fromPlatform();
 
   Future<void> _checkForUpdate() async {
     setState(() {
@@ -124,7 +125,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 40),
                 Center(
                   child: FutureBuilder<PackageInfo>(
-                    future: PackageInfo.fromPlatform(),
+                    future: _packageInfoFuture,
                     builder: (context, snapshot) {
                       final version = snapshot.hasData ? snapshot.data!.version : '...';
                       return Text(
@@ -152,54 +153,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required IconData icon,
     required Widget page,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-      ),
-      child: ListTile(
-        onTap: () {
-          Navigator.of(context).push(buildSettingsRoute(page));
-        },
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: Colors.white70, size: 24),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 17,
-            fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
-            fontWeight: FontWeight(1000),
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            subtitle,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 14,
-              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-        ),
-        trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
-      ),
+    return _buildTileCard(
+      title: title,
+      subtitle: subtitle,
+      icon: icon,
+      onTap: () => Navigator.of(context).push(buildSettingsRoute(page)),
+      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
     );
   }
 
   Widget _buildActionTile(
     BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback? onTap,
+    Widget? trailing,
+  }) {
+    return _buildTileCard(
+      title: title,
+      subtitle: subtitle,
+      icon: icon,
+      onTap: onTap,
+      trailing: trailing,
+    );
+  }
+
+  Widget _buildTileCard({
     required String title,
     required String subtitle,
     required IconData icon,
@@ -213,39 +193,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
-      child: ListTile(
-        onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: Colors.white70, size: 24),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 17,
-            fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
-            fontWeight: FontWeight(1000),
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            subtitle,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 14,
-              fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
-              fontWeight: FontWeight.w400,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Material(
+          type: MaterialType.transparency,
+          child: ListTile(
+            onTap: onTap,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            leading: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.white70, size: 24),
             ),
+            title: Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                fontWeight: FontWeight(1000),
+              ),
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                subtitle,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 14,
+                  fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+            trailing: trailing,
           ),
         ),
-        trailing: trailing,
       ),
     );
   }

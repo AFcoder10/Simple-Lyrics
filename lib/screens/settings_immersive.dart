@@ -212,14 +212,24 @@ class ImmersiveEffectsSettingsScreen extends StatelessWidget {
     required Widget child,
   }) {
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 260),
+      duration: const Duration(milliseconds: 220),
+      reverseDuration: const Duration(milliseconds: 170),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (currentChild, previousChildren) {
+        return Stack(
+          alignment: Alignment.topCenter,
+          children: [
+            ...previousChildren,
+            ?currentChild,
+          ],
+        );
+      },
       transitionBuilder: (child, animation) {
         return SizeTransition(
           sizeFactor: animation,
           axis: Axis.vertical,
-          axisAlignment: -1.0,
+          alignment: Alignment.topCenter,
           child: FadeTransition(opacity: animation, child: child),
         );
       },

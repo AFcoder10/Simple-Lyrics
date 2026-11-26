@@ -86,188 +86,29 @@ class BackgroundSettingsScreen extends StatelessWidget {
             valueListenable: settings.backgroundStyle,
             builder: (context, currentStyle, _) {
               return AnimatedSize(
-                duration: const Duration(milliseconds: 300),
+                duration: const Duration(milliseconds: 240),
                 curve: Curves.easeOutCubic,
                 alignment: Alignment.topCenter,
-                child: currentStyle == BackgroundStyle.spinningBlur 
-                  ? Column(
+                clipBehavior: Clip.hardEdge,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  layoutBuilder: (currentChild, previousChildren) {
+                    return Stack(
+                      alignment: Alignment.topCenter,
                       children: [
-                        const SizedBox(height: 20),
-                        _buildSettingSection(
-                          title: 'Dynamic Blur Settings',
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                            ),
-                            child: Column(
-                              children: [
-                                _buildSliderRow(
-                                  label: 'Blur Intensity',
-                                  icon: Icons.blur_linear_rounded,
-                                  valueListenable: settings.blurIntensity,
-                                  min: 0.0,
-                                  max: 80.0,
-                                ),
-                                const Divider(color: Colors.white10, height: 1),
-                                _buildSliderRow(
-                                  label: 'Animation Speed',
-                                  icon: Icons.speed_rounded,
-                                  valueListenable: settings.blurAnimationSpeed,
-                                  min: 0.2, // Very slow
-                                  max: 3.0, // Very fast
-                                ),
-                                const Divider(color: Colors.white10, height: 1),
-                                TextButton.icon(
-                                  onPressed: () {
-                                    settings.blurIntensity.value = 10.0;
-                                    settings.blurAnimationSpeed.value = 1.0;
-                                  },
-                                  icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white70),
-                                  label: const Text(
-                                    'Reset Defaults',
-                                    style: TextStyle(color: Colors.white70, fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks),
-                                  ),
-                                  style: TextButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    minimumSize: const Size(double.infinity, 0),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                        for (final prev in previousChildren)
+                          Positioned(top: 0, left: 0, right: 0, child: prev),
+                        ?currentChild,
                       ],
-                    )
-                  : const SizedBox.shrink(),
-              );
-            },
-          ),
-          ValueListenableBuilder<BackgroundStyle>(
-            valueListenable: settings.backgroundStyle,
-            builder: (context, currentStyle, _) {
-              return AnimatedSize(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                alignment: Alignment.topCenter,
-                child: currentStyle == BackgroundStyle.acrylic 
-                  ? Column(
-                      children: [
-                        const SizedBox(height: 20),
-                        _buildSettingSection(
-                          title: 'Acrylic Texture Settings',
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                            ),
-                            child: Column(
-                              children: [
-                                _buildSliderRow(
-                                  label: 'Grain Intensity',
-                                  icon: Icons.grain_rounded,
-                                  valueListenable: settings.grainIntensity,
-                                  min: 0.0,
-                                  max: 0.15,
-                                ),
-                                const Divider(color: Colors.white10, height: 1),
-                                TextButton.icon(
-                                  onPressed: () {
-                                    settings.grainIntensity.value = 0.04;
-                                  },
-                                  icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white70),
-                                  label: const Text(
-                                    'Reset Defaults',
-                                    style: TextStyle(color: Colors.white70, fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks),
-                                  ),
-                                  style: TextButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    minimumSize: const Size(double.infinity, 0),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : const SizedBox.shrink(),
-              );
-            },
-          ),
-          ValueListenableBuilder<BackgroundStyle>(
-            valueListenable: settings.backgroundStyle,
-            builder: (context, currentStyle, _) {
-              return AnimatedSize(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                alignment: Alignment.topCenter,
-                child: currentStyle == BackgroundStyle.staticColor 
-                  ? Column(
-                      children: [
-                        const SizedBox(height: 20),
-                        _buildSettingSection(
-                          title: 'Static Color Settings',
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                            ),
-                            child: Column(
-                              children: [
-                                _buildSliderRow(
-                                  label: 'Vibrancy',
-                                  icon: Icons.contrast_rounded,
-                                  valueListenable: settings.staticVibrancy,
-                                  min: 0.0,
-                                  max: 3.0,
-                                ),
-                                const Divider(color: Colors.white10, height: 1),
-                                _buildSliderRow(
-                                  label: 'Contrast',
-                                  icon: Icons.brightness_medium_rounded,
-                                  valueListenable: settings.staticContrast,
-                                  min: 0.2, // low contrast
-                                  max: 2.5, // high contrast
-                                ),
-                                const Divider(color: Colors.white10, height: 1),
-                                TextButton.icon(
-                                  onPressed: () {
-                                    settings.staticVibrancy.value = 1.8;
-                                    settings.staticContrast.value = 1.0;
-                                  },
-                                  icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white70),
-                                  label: const Text(
-                                    'Reset Defaults',
-                                    style: TextStyle(color: Colors.white70, fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks),
-                                  ),
-                                  style: TextButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    minimumSize: const Size(double.infinity, 0),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : const SizedBox.shrink(),
+                    );
+                  },
+                  child: KeyedSubtree(
+                    key: ValueKey(currentStyle),
+                    child: _buildStyleOptions(currentStyle, settings),
+                  ),
+                ),
               );
             },
           ),
@@ -277,6 +118,121 @@ class BackgroundSettingsScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStyleOptions(BackgroundStyle style, SettingsService settings) {
+    switch (style) {
+      case BackgroundStyle.spinningBlur:
+        return _buildOptionsGroup(
+          title: 'Dynamic Blur Settings',
+          rows: [
+            _buildSliderRow(
+              label: 'Blur Intensity',
+              icon: Icons.blur_linear_rounded,
+              valueListenable: settings.blurIntensity,
+              min: 0.0,
+              max: 80.0,
+            ),
+            _buildSliderRow(
+              label: 'Animation Speed',
+              icon: Icons.speed_rounded,
+              valueListenable: settings.blurAnimationSpeed,
+              min: 0.2,
+              max: 3.0,
+            ),
+          ],
+          onReset: () {
+            settings.blurIntensity.value = 10.0;
+            settings.blurAnimationSpeed.value = 1.0;
+          },
+        );
+      case BackgroundStyle.acrylic:
+        return _buildOptionsGroup(
+          title: 'Acrylic Texture Settings',
+          rows: [
+            _buildSliderRow(
+              label: 'Grain Intensity',
+              icon: Icons.grain_rounded,
+              valueListenable: settings.grainIntensity,
+              min: 0.0,
+              max: 0.15,
+            ),
+          ],
+          onReset: () {
+            settings.grainIntensity.value = 0.04;
+          },
+        );
+      case BackgroundStyle.staticColor:
+        return _buildOptionsGroup(
+          title: 'Static Color Settings',
+          rows: [
+            _buildSliderRow(
+              label: 'Vibrancy',
+              icon: Icons.contrast_rounded,
+              valueListenable: settings.staticVibrancy,
+              min: 0.0,
+              max: 3.0,
+            ),
+            _buildSliderRow(
+              label: 'Contrast',
+              icon: Icons.brightness_medium_rounded,
+              valueListenable: settings.staticContrast,
+              min: 0.2,
+              max: 2.5,
+            ),
+          ],
+          onReset: () {
+            settings.staticVibrancy.value = 1.8;
+            settings.staticContrast.value = 1.0;
+          },
+        );
+    }
+  }
+
+  Widget _buildOptionsGroup({
+    required String title,
+    required List<Widget> rows,
+    required VoidCallback onReset,
+  }) {
+    return Column(
+      children: [
+        const SizedBox(height: 20),
+        _buildSettingSection(
+          title: title,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Column(
+              children: [
+                for (final row in rows) ...[
+                  row,
+                  const Divider(color: Colors.white10, height: 1),
+                ],
+                TextButton.icon(
+                  onPressed: onReset,
+                  icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white70),
+                  label: const Text(
+                    'Reset Defaults',
+                    style: TextStyle(color: Colors.white70, fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    minimumSize: const Size(double.infinity, 0),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

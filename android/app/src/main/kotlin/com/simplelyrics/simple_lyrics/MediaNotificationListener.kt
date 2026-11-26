@@ -45,8 +45,11 @@ class MediaNotificationListener : NotificationListenerService() {
     private var lastSentHadArt = false
 
     private var lastBroadcastTime = 0L
+    private var lastBroadcastPos: Long = -1L
     private var lastReportedState: Int? = null
+    private var lastReportedSpeed: Float = 1f
     private var lastReportedTitle: String? = null
+    private var listenerRegistered = false
 
     private val shuffleModeNone = 0
     private val repeatModeNone = 0
@@ -65,14 +68,51 @@ class MediaNotificationListener : NotificationListenerService() {
         }
 
         override fun onPlaybackStateChanged(state: PlaybackState?) {
-            val stateCode = state?.state
+            if (state == null) {
+                if (lastReportedState != null) {
+                    broadcastState()
+                }
+                return
+            }
+
+            val stateCode = state.state
+            val speed = state.playbackSpeed
             val now = SystemClock.elapsedRealtime()
-            // Reduce broadcast frequency for position updates, but ensure we don't miss state changes
-            if (stateCode != lastReportedState || (now - lastBroadcastTime) > 2000) {
-                lastReportedState = stateCode
-                lastBroadcastTime = now
+
+            var isExternalSeek = false
+            val pos = state.position
+            if (pos >= 0L && lastBroadcastPos >= 0L) {
+                val elapsed = (now - lastBroadcastTime).coerceAtLeast(0L)
+                val expected = if (lastReportedState == PlaybackState.STATE_PLAYING && lastReportedSpeed != 0f) {
+                    lastBroadcastPos + (elapsed * lastReportedSpeed).toLong()
+                } else {
+                    lastBroadcastPos
+                }
+                if (kotlin.math.abs(pos - expected) > 350L) {
+                    isExternalSeek = true
+                }
+            }
+
+            // Broadcast immediately on state/rate change or external seek (even while paused),
+            // otherwise throttle noisy periodic ticks to every ~2s.
+            if (stateCode != lastReportedState ||
+                speed != lastReportedSpeed ||
+                isExternalSeek ||
+                (now - lastBroadcastTime) > 2000L
+            ) {
                 broadcastState()
             }
+        }
+
+        override fun onSessionDestroyed() {
+            activeController?.unregisterCallback(this)
+            activeController = null
+            lastSentArtKey = null
+            lastSentHadArt = false
+            lastReportedTitle = null
+            lastReportedState = null
+            lastBroadcastPos = -1L
+            broadcastState()
         }
     }
 
@@ -86,19 +126,40 @@ class MediaNotificationListener : NotificationListenerService() {
         super.onCreate()
         instance = this
         Log.d(TAG, "Service created")
-
         mediaSessionManager =
             getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+        ensureActiveSessionListener()
+    }
 
-        // Start listening for session changes
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        instance = this
+        Log.d(TAG, "Listener connected")
+        mediaSessionManager =
+            getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+        ensureActiveSessionListener()
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        listenerRegistered = false
+        try {
+            mediaSessionManager?.removeOnActiveSessionsChangedListener(sessionsChangedListener)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun ensureActiveSessionListener() {
+        val manager = mediaSessionManager ?: return
         try {
             val componentName = ComponentName(this, this::class.java)
-            mediaSessionManager?.addOnActiveSessionsChangedListener(
-                sessionsChangedListener, componentName
-            )
-
-            // Get initial sessions
-            val controllers = mediaSessionManager?.getActiveSessions(componentName)
+            if (!listenerRegistered) {
+                manager.addOnActiveSessionsChangedListener(
+                    sessionsChangedListener, componentName
+                )
+                listenerRegistered = true
+            }
+            val controllers = manager.getActiveSessions(componentName)
             updateActiveController(controllers)
         } catch (e: SecurityException) {
             Log.e(TAG, "SecurityException - notification access not granted", e)
@@ -108,6 +169,7 @@ class MediaNotificationListener : NotificationListenerService() {
     override fun onDestroy() {
         super.onDestroy()
         instance = null
+        listenerRegistered = false
         activeController?.unregisterCallback(sessionCallback)
         try {
             mediaSessionManager?.removeOnActiveSessionsChangedListener(sessionsChangedListener)
@@ -172,8 +234,9 @@ class MediaNotificationListener : NotificationListenerService() {
 
         val album = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: ""
 
-        val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
-        var position = playbackState?.position ?: 0L
+        val duration = (metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L).coerceAtLeast(0L)
+        val rawPosition = playbackState?.position ?: PlaybackState.PLAYBACK_POSITION_UNKNOWN
+        var position = if (rawPosition >= 0L) rawPosition else 0L
         val stateCode = playbackState?.state ?: lastReportedState
         val playbackSpeed = playbackState?.playbackSpeed ?: 1f
         val isAdvancing = stateCode == PlaybackState.STATE_PLAYING && playbackSpeed != 0f
@@ -186,10 +249,19 @@ class MediaNotificationListener : NotificationListenerService() {
         val supportsRepeatMode = (actions and actionSetRepeatMode) != 0L
         val supportsShuffleMode = (actions and actionSetShuffleMode) != 0L
 
-        if (isAdvancing && playbackState != null) {
-            val timeDelta = SystemClock.elapsedRealtime() - playbackState.lastPositionUpdateTime
-            position += (timeDelta * playbackSpeed).toLong()
+        if (isAdvancing && playbackState != null && rawPosition >= 0L) {
+            val updateTime = playbackState.lastPositionUpdateTime
+            if (updateTime > 0L) {
+                val timeDelta = (SystemClock.elapsedRealtime() - updateTime).coerceAtLeast(0L)
+                position += (timeDelta * playbackSpeed).toLong()
+            }
         }
+        position = if (duration > 0L) position.coerceIn(0L, duration) else position.coerceAtLeast(0L)
+
+        lastReportedState = stateCode
+        lastReportedSpeed = playbackSpeed
+        lastBroadcastTime = SystemClock.elapsedRealtime()
+        lastBroadcastPos = position
 
         val stateMap = mutableMapOf<String, Any?>(
             "title" to title,

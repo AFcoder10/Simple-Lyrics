@@ -8,11 +8,13 @@ import 'acrylic_overlay.dart';
 class BackgroundController extends StatelessWidget {
   final Uint8List? albumArtBytes;
   final bool forceStatic;
+  final bool isPlaying;
 
   const BackgroundController({
     super.key,
     required this.albumArtBytes,
     this.forceStatic = false,
+    this.isPlaying = true,
   });
 
   @override
@@ -43,6 +45,7 @@ class BackgroundController extends StatelessWidget {
         return SpinningBlurBackground(
           key: const ValueKey('spinningBlur'),
           albumArtBytes: albumArtBytes,
+          isPlaying: isPlaying,
         );
       case BackgroundStyle.acrylic:
         return Stack(
@@ -51,6 +54,7 @@ class BackgroundController extends StatelessWidget {
           children: [
             SpinningBlurBackground(
               albumArtBytes: albumArtBytes,
+              isPlaying: isPlaying,
             ),
             const StaticAcrylicOverlay(),
           ],

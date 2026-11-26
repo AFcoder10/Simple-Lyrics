@@ -47,62 +47,82 @@ class HapticSettingsScreen extends StatelessWidget {
           ValueListenableBuilder<bool>(
             valueListenable: settings.hapticLyricsEnabled,
             builder: (context, enabled, _) {
-              return AnimatedSize(
-                duration: const Duration(milliseconds: 400),
-                curve: Curves.easeInOutCubic,
-                child: !enabled 
-                  ? const SizedBox(width: double.infinity, height: 0)
-                  : Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Column(
-                        children: [
-                          _buildSettingTile(
-                            title: 'Haptic Intensity',
-                            subtitle: 'Adjust vibration strength',
-                            icon: Icons.graphic_eq_rounded,
-                            trailing: SizedBox(
-                              width: 120,
-                              child: ValueListenableBuilder<double>(
-                                valueListenable: settings.hapticIntensity,
-                                builder: (context, intensity, _) {
-                                  return SliderTheme(
-                                    data: SliderTheme.of(context).copyWith(
-                                      trackHeight: 4,
-                                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                                      activeTrackColor: const Color(0xFF1DB954),
-                                      inactiveTrackColor: Colors.white10,
-                                      thumbColor: Colors.white,
-                                    ),
-                                    child: Slider(
-                                      value: intensity,
-                                      onChanged: (val) => settings.hapticIntensity.value = val,
-                                    ),
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                reverseDuration: const Duration(milliseconds: 180),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                layoutBuilder: (currentChild, previousChildren) {
+                  return Stack(
+                    alignment: Alignment.topCenter,
+                    children: [
+                      ...previousChildren,
+                      ?currentChild,
+                    ],
+                  );
+                },
+                transitionBuilder: (child, animation) {
+                  return SizeTransition(
+                    sizeFactor: animation,
+                    axis: Axis.vertical,
+                    alignment: Alignment.topCenter,
+                    child: FadeTransition(opacity: animation, child: child),
+                  );
+                },
+                child: !enabled
+                    ? const SizedBox.shrink(key: ValueKey('haptics_off'))
+                    : Padding(
+                        key: const ValueKey('haptics_on'),
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Column(
+                          children: [
+                            _buildSettingTile(
+                              title: 'Haptic Intensity',
+                              subtitle: 'Adjust vibration strength',
+                              icon: Icons.graphic_eq_rounded,
+                              trailing: SizedBox(
+                                width: 120,
+                                child: ValueListenableBuilder<double>(
+                                  valueListenable: settings.hapticIntensity,
+                                  builder: (context, intensity, _) {
+                                    return SliderTheme(
+                                      data: SliderTheme.of(context).copyWith(
+                                        trackHeight: 4,
+                                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                                        activeTrackColor: const Color(0xFF1DB954),
+                                        inactiveTrackColor: Colors.white10,
+                                        thumbColor: Colors.white,
+                                      ),
+                                      child: Slider(
+                                        value: intensity,
+                                        onChanged: (val) => settings.hapticIntensity.value = val,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            _buildSettingTile(
+                              title: 'Word-to-Word Vibration',
+                              subtitle: 'Vibrate for each individual word',
+                              icon: Icons.text_fields_rounded,
+                              trailing: ValueListenableBuilder<bool>(
+                                valueListenable: settings.wordToWordHapticsEnabled,
+                                builder: (context, enabled, _) {
+                                  return Switch.adaptive(
+                                    value: enabled,
+                                    onChanged: (val) => settings.wordToWordHapticsEnabled.value = val,
+                                    activeThumbColor: const Color(0xFF1DB954),
                                   );
                                 },
                               ),
                             ),
-                          ),
-                          _buildSettingTile(
-                            title: 'Word-to-Word Vibration',
-                            subtitle: 'Vibrate for each individual word',
-                            icon: Icons.text_fields_rounded,
-                            trailing: ValueListenableBuilder<bool>(
-                              valueListenable: settings.wordToWordHapticsEnabled,
-                              builder: (context, enabled, _) {
-                                return Switch.adaptive(
-                                  value: enabled,
-                                  onChanged: (val) => settings.wordToWordHapticsEnabled.value = val,
-                                  activeThumbColor: const Color(0xFF1DB954),
-                                );
-                              },
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
               );
-            }
+            },
           ),
         ],
       ),

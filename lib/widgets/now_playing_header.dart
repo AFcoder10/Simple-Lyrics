@@ -392,7 +392,7 @@ class _MarqueeTextState extends State<_MarqueeText> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    final scrollChild = SingleChildScrollView(
       controller: _scrollController,
       scrollDirection: Axis.horizontal,
       physics: const NeverScrollableScrollPhysics(),
@@ -401,6 +401,26 @@ class _MarqueeTextState extends State<_MarqueeText> {
         style: widget.style,
         maxLines: 1,
       ),
+    );
+
+    if (!_needsScroll) return scrollChild;
+
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (bounds) {
+        return const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            Colors.transparent,
+            Colors.white,
+            Colors.white,
+            Colors.transparent,
+          ],
+          stops: [0.0, 0.06, 0.94, 1.0],
+        ).createShader(bounds);
+      },
+      child: scrollChild,
     );
   }
 }

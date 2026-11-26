@@ -50,6 +50,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
         widget.mediaState.artist != oldWidget.mediaState.artist;
 
     if (songChanged) {
+      _isDragging = false;
       _smoothPositionMs = widget.positionNotifier.value.inMilliseconds.toDouble();
     }
   }
@@ -100,7 +101,8 @@ class _PlaybackControlsState extends State<PlaybackControls> {
 
   Widget _buildSeekBar(BuildContext context) {
     final durationMs = widget.mediaState.duration.inMilliseconds.toDouble();
-    final maxVal = durationMs > 0 ? durationMs : 1.0;
+    final hasDuration = durationMs > 0;
+    final maxVal = hasDuration ? durationMs : 1.0;
 
     return ValueListenableBuilder<Duration>(
       valueListenable: widget.positionNotifier,
@@ -108,39 +110,55 @@ class _PlaybackControlsState extends State<PlaybackControls> {
         final positionMs = _isDragging
             ? _smoothPositionMs
             : visualPosition.inMilliseconds.toDouble();
-        final currentVal = positionMs.clamp(0.0, maxVal);
+        final currentVal = hasDuration ? positionMs.clamp(0.0, maxVal) : 0.0;
 
         return Column(
           children: [
-            SliderTheme(
-              data: SliderThemeData(
-                trackHeight: 6,
-                trackShape: const RoundedRectSliderTrackShape(),
-                thumbShape: SliderComponentShape.noThumb,
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 0),
-                activeTrackColor: Colors.white,
-                inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
-              ),
-              child: Slider(
-                value: currentVal,
-                min: 0.0,
-                max: maxVal,
-                onChanged: (value) {
-                  widget.onInteraction();
-                  setState(() {
-                    _isDragging = true;
-                    _smoothPositionMs = value;
-                  });
-                  widget.onPositionPreviewing(true);
-                  widget.onPositionPreview(Duration(milliseconds: value.toInt()));
-                },
-                onChangeEnd: (value) {
-                  widget.onInteraction();
-                  _isDragging = false;
-                  widget.onPositionPreviewing(false);
-                  widget.service.seekTo(Duration(milliseconds: value.toInt()));
-                },
-              ),
+            TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 6.0, end: _isDragging ? 10.5 : 6.0),
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              builder: (context, trackHeight, _) {
+                return SliderTheme(
+                  data: SliderThemeData(
+                    trackHeight: trackHeight,
+                    trackShape: const RoundedRectSliderTrackShape(),
+                    thumbShape: SliderComponentShape.noThumb,
+                    overlayShape:
+                        const RoundSliderOverlayShape(overlayRadius: 0),
+                    activeTrackColor: Colors.white,
+                    inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
+                  ),
+                  child: Slider(
+                    value: currentVal,
+                    min: 0.0,
+                    max: maxVal,
+                    onChanged: hasDuration
+                        ? (value) {
+                            widget.onInteraction();
+                            setState(() {
+                              _isDragging = true;
+                              _smoothPositionMs = value;
+                            });
+                            widget.onPositionPreviewing(true);
+                            widget.onPositionPreview(
+                              Duration(milliseconds: value.toInt()),
+                            );
+                          }
+                        : null,
+                    onChangeEnd: hasDuration
+                        ? (value) {
+                            widget.onInteraction();
+                            _isDragging = false;
+                            widget.onPositionPreviewing(false);
+                            widget.service.seekTo(
+                              Duration(milliseconds: value.toInt()),
+                            );
+                          }
+                        : null,
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 6),
             Padding(
@@ -148,23 +166,29 @@ class _PlaybackControlsState extends State<PlaybackControls> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    _formatDuration(Duration(milliseconds: currentVal.toInt())),
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 160),
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
+                      color: Colors.white.withValues(alpha: _isDragging ? 0.90 : 0.50),
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                      fontFamily: 'Display',
+                      fontFamilyFallback: kGlobalFontFallbacks,
+                    ),
+                    child: Text(
+                      _formatDuration(Duration(milliseconds: currentVal.toInt())),
                     ),
                   ),
-                  Text(
-                    _formatDuration(widget.mediaState.duration),
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 160),
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
+                      color: Colors.white.withValues(alpha: _isDragging ? 0.75 : 0.50),
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                      fontFamily: 'Display',
+                      fontFamilyFallback: kGlobalFontFallbacks,
                     ),
+                    child: Text(_formatDuration(widget.mediaState.duration)),
                   ),
                 ],
               ),

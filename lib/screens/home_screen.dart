@@ -75,6 +75,7 @@ class _HomeScreenState extends State<HomeScreen>
   static const _metadataSettle = Duration(milliseconds: 600);
 
   String _observedSongKey = '';
+  String _lastStableSongKey = '';
   DateTime _observedSince = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _metadataSettleTimer;
 
@@ -221,13 +222,14 @@ class _HomeScreenState extends State<HomeScreen>
       });
     }
 
-    final previousSongKey = '${_mediaState.title}|${_mediaState.artist}';
-    // GSMTC often publishes title and artist one field at a time. Treating
-    // those half-frames as a new song resets the clock and the highlight
-    // jumps to 0 (or to a stale other-track position).
-    final songChanged = incomingKey != previousSongKey &&
-        _hasStableIdentity(state) &&
-        _hasStableIdentity(_mediaState);
+    // GSMTC / MediaSession sometimes briefly publishes empty or partial
+    // metadata between tracks. Compare against the last stable track identity
+    // so track changes are never missed across brief unstable frames.
+    final isStable = _hasStableIdentity(state);
+    final songChanged = isStable && incomingKey != _lastStableSongKey;
+    if (isStable) {
+      _lastStableSongKey = incomingKey;
+    }
 
     final displayState =
         !songChanged && state.albumArtBytes == null
@@ -576,6 +578,7 @@ class _HomeScreenState extends State<HomeScreen>
                     return BackgroundController(
                       albumArtBytes: _mediaState.albumArtBytes,
                       forceStatic: performanceMode,
+                      isPlaying: _mediaState.isPlaying,
                     );
                   },
                 ),

@@ -110,39 +110,45 @@ class AppearanceSettingsScreen extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
           ),
-          child: ListTile(
-            onTap: onTap,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            leading: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: Colors.white70, size: 24),
-            ),
-            title: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 17,
-                fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
-                fontWeight: FontWeight(1000),
-              ),
-            ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                subtitle,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 14,
-                  fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
-                  fontWeight: FontWeight.w400,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                onTap: onTap,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: Colors.white70, size: 24),
                 ),
+                title: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                    fontWeight: FontWeight(1000),
+                  ),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 14,
+                      fontFamily: 'Display', fontFamilyFallback: kGlobalFontFallbacks,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+                trailing: trailing,
               ),
             ),
-            trailing: trailing,
           ),
         ),
         if (showBeta)

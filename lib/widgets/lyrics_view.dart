@@ -2,6 +2,7 @@ import 'package:simple_lyrics/core/font_fallbacks.dart';
 import 'package:simple_lyrics/core/platform_capabilities.dart';
 import 'dart:ui' as ui;
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Text;
@@ -52,6 +53,7 @@ class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
   int _focusIndex = -1;
   int _focusDisplayIndex = -1;
   
+  static const double _focusViewportAlignment = 0.25;
   final ValueNotifier<double> _smoothSeconds = ValueNotifier<double>(0.0);
   bool _scrollQueued = false;
   bool _pendingScrollToTop = false;
@@ -63,6 +65,7 @@ class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
   bool _userIsTouching = false;
   bool _waitingForNewTrackLyrics = false;
   Timer? _trackWaitTimer;
+  Timer? _autoRelockTimer;
   int _searchAttempts = 0; // NEW: Track search jumps
   
   // Seek indicator state
@@ -305,6 +308,18 @@ class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
     );
   }
 
+  void _scheduleAutoRelock() {
+    _autoRelockTimer?.cancel();
+    if (_isAutoLocked || _userIsTouching) return;
+    _autoRelockTimer = Timer(const Duration(milliseconds: 4500), () {
+      if (!mounted || _isAutoLocked || _userIsTouching) return;
+      setState(() => _isAutoLocked = true);
+      _syncWaveEnabled();
+      _calculateFocus(_smoothSeconds.value);
+      _scrollToFocusLine();
+    });
+  }
+
   @override
   void dispose() {
     SettingsService().parallaxEnabled.removeListener(_onParallaxSettingChanged);
@@ -313,6 +328,7 @@ class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
     _waveController.dispose();
     _ticker.dispose();
     _trackWaitTimer?.cancel();
+    _autoRelockTimer?.cancel();
     _seekIndicatorTimer?.cancel();
     _gyroSubscription?.cancel();
     _smoothSeconds.dispose();
@@ -496,7 +512,7 @@ class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
     final viewport = RenderAbstractViewport.maybeOf(renderObject);
     if (viewport == null) return;
 
-    final targetOffset = viewport.getOffsetToReveal(renderObject, 0.35).offset;
+    final targetOffset = viewport.getOffsetToReveal(renderObject, _focusViewportAlignment).offset;
     final currentOffset = _scrollController.offset;
 
     if ((currentOffset - targetOffset).abs() < 120.0) {
@@ -574,7 +590,7 @@ class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
     if (viewport == null) return;
 
     final position = _scrollController.position;
-    final targetOffset = viewport.getOffsetToReveal(renderObject, 0.35).offset;
+    final targetOffset = viewport.getOffsetToReveal(renderObject, _focusViewportAlignment).offset;
     final clampedOffset = targetOffset.clamp(
       position.minScrollExtent,
       position.maxScrollExtent,
@@ -603,9 +619,9 @@ class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
         : 0.0;
     _autoScrollController.value = currentOffset;
     const scrollSpring = SpringDescription(
-      mass: 1.25,
-      stiffness: 46.0,
-      damping: 14.8,
+      mass: 1.15,
+      stiffness: 62.0,
+      damping: 16.4,
     );
     _autoScrollController.animateWith(
       SpringSimulation(
@@ -639,30 +655,35 @@ class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
     return Listener(
       onPointerDown: (_) {
         _userIsTouching = true;
+        _autoRelockTimer?.cancel();
         _autoScrollController.stop();
         _syncWaveEnabled();
       },
       onPointerUp: (_) {
         _userIsTouching = false;
         _syncWaveEnabled();
+        if (!_isAutoLocked) _scheduleAutoRelock();
       },
       onPointerCancel: (_) {
         _userIsTouching = false;
         _syncWaveEnabled();
+        if (!_isAutoLocked) _scheduleAutoRelock();
       },
       child: NotificationListener<ScrollNotification>(
         onNotification: (notification) {
           if (notification is ScrollUpdateNotification) {
             if (_userIsTouching && notification.dragDetails != null && _isAutoLocked) {
+              _autoRelockTimer?.cancel();
               setState(() => _isAutoLocked = false);
               _syncWaveEnabled();
             }
             if (!_isAutoLocked && notification.dragDetails != null) {
+              _scheduleAutoRelock();
               _checkIfUserScrolledIntoRange();
               
               // NEW: Magnetic Haptic Scroll
               // Trigger a tiny click when a new line passes the center
-              final centerOffset = _scrollController.offset + (_scrollController.position.viewportDimension * 0.35);
+              final centerOffset = _scrollController.offset + (_scrollController.position.viewportDimension * _focusViewportAlignment);
               int currentlyHoveredLine = -1;
               
               // Find which line is closest to the focus center
@@ -762,7 +783,7 @@ class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
                   ),
                 SliverPadding(
                   padding: EdgeInsets.symmetric(
-                    horizontal: 28, 
+                    horizontal: data.timingType == LyricsTimingType.none ? 28 : 18,
                     vertical: data.timingType == LyricsTimingType.none ? 0 : 140,
                   ),
                   sliver: SliverList(
@@ -777,20 +798,25 @@ class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
                         }
                         return KeyedSubtree(
                           key: _lineKeys[displayIndex],
-                          child: RepaintBoundary(
-                            child: _DominoWaveItem(
-                              controller: _waveController,
-                              displayIndex: displayIndex,
-                              focusDisplayIndex: _focusDisplayIndex,
-                              enabled: data.timingType != LyricsTimingType.none &&
-                                  !_startupSettling &&
-                                  !_firstScroll,
-                              child: RepaintBoundary(
-                                child: _InterludeDots(
-                                  smoothSeconds: _smoothSeconds,
-                                  gapStart: _interludeStarts[interludeIdx],
-                                  gapEnd: _interludeEnds[interludeIdx],
-                                  service: widget.service,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: data.timingType == LyricsTimingType.none ? 0 : 10,
+                            ),
+                            child: RepaintBoundary(
+                              child: _DominoWaveItem(
+                                controller: _waveController,
+                                displayIndex: displayIndex,
+                                focusDisplayIndex: _focusDisplayIndex,
+                                enabled: data.timingType != LyricsTimingType.none &&
+                                    !_startupSettling &&
+                                    !_firstScroll,
+                                child: RepaintBoundary(
+                                  child: _InterludeDots(
+                                    smoothSeconds: _smoothSeconds,
+                                    gapStart: _interludeStarts[interludeIdx],
+                                    gapEnd: _interludeEnds[interludeIdx],
+                                    service: widget.service,
+                                  ),
                                 ),
                               ),
                             ),
@@ -812,7 +838,23 @@ class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
                           ? (1.0 - (distance / 15.0)).clamp(0.0, 1.0)
                           : 1.0;
 
-                      Widget buildLine(bool lit) {
+                      Widget buildLine(_LinePhase phase) {
+                        final double targetOpacity;
+                        switch (phase) {
+                          case _LinePhase.active:
+                            targetOpacity = line.isBackground ? 0.88 : 1.0;
+                            break;
+                          case _LinePhase.upcoming:
+                            targetOpacity = (line.isBackground ? 0.34 : 0.48) * edgeFade;
+                            break;
+                          case _LinePhase.future:
+                            targetOpacity = (line.isBackground ? 0.20 : 0.32) * edgeFade;
+                            break;
+                          case _LinePhase.past:
+                            targetOpacity = (line.isBackground ? 0.16 : 0.22) * edgeFade;
+                            break;
+                        }
+
                         return KeyedSubtree(
                           key: _lineKeys[displayIndex],
                           child: RepaintBoundary(
@@ -824,115 +866,128 @@ class LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
                                   !_startupSettling &&
                                   !_firstScroll,
                               child: RepaintBoundary(
-                                child: GestureDetector(
-                            onTap: () {
-                              if (data.timingType == LyricsTimingType.none) return;
-                              
-                              HapticFeedback.selectionClick();
-                              widget.onLyricsInteraction();
-                              widget.service.notifyUserInteraction();
-                              widget.service.seekTo(
-                                Duration(milliseconds: (line.startTime * 1000).toInt()),
-                              );
-                            },
-                            child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 420),
-                              curve: Curves.easeOutCubic,
-                              // LINE IS LIT if it is either Active (animating)
-                              // If it is lit, it is ALWAYS fully visible, ignoring edgeFade distance.
-                              opacity: lit ? 1.0 : (0.28 * edgeFade),
-                              child: AnimatedScale(
-                                scale: (!_startupSettling && isFocused && !line.isBackground) ? 1.035 : 1.0,
-                                alignment: line.alignment == LyricsLineAlignment.right
-                                    ? Alignment.centerRight
-                                    : Alignment.centerLeft,
-                                duration: const Duration(milliseconds: 520),
-                                curve: Curves.easeOutCubic,
-                                child: Padding(
-                                    padding: EdgeInsets.only(
-                                      top: isFocused && !line.isBackground ? 2.0 : (data.timingType == LyricsTimingType.none ? 8.0 : 0.0),
-                                      bottom: isFocused && !line.isBackground ? 8.0 : (data.timingType == LyricsTimingType.none ? 8.0 : 2.0),
-                                    ),
-                                  child: Builder(builder: (context) {
-                                    final innerLine = ValueListenableBuilder<bool>(
-                                      valueListenable: SettingsService().romanizationEnabled,
-                                      builder: (context, romanize, _) {
-                                        final effectiveText = (romanize && line.transliteratedText != null)
-                                            ? line.transliteratedText!
-                                            : line.text;
-                                        
-                                        // If timing is 'none', we use a smaller, static style
-                                        if (data.timingType == LyricsTimingType.none) {
-                                          return material.Text(
-                                            effectiveText,
-                                            style: TextStyle(
-                                              color: Colors.white.withValues(alpha: 0.95),
-                                              fontSize: SettingsService().lyricsFontSize.value * 0.8,
-                                              height: 1.6,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          );
-                                        }
+                                child: _PressableLyricLine(
+                                  enabled: data.timingType != LyricsTimingType.none,
+                                  onTap: () {
+                                    if (data.timingType == LyricsTimingType.none) return;
 
-                                        // If romanized text is being used, we check if word-level transliterations exist.
-                                        // If the line has word timing, we animate it word-by-word.
-                                        if (line.hasWordTiming && isActive) {
-                                          // This is the line that rebuilds and repaints every frame, so it is
-                                          // the one that needs the boundary — otherwise its layer is merged with
-                                          // the ancestors (blur, background) and drags them into every repaint.
-                                          return RepaintBoundary(
-                                            child: _ActiveWordLine(
-                                              line: line,
-                                              smoothSeconds: _smoothSeconds,
-                                              romanize: romanize,
-                                            ),
-                                          );
-                                        } else {
-                                          return RepaintBoundary(
-                                            child: line.hasWordTiming
-                                              ? _ActiveWordLine(
-                                                  line: line, 
-                                                  smoothSeconds: _smoothSeconds,
-                                                  romanize: romanize,
-                                                )
-                                              : _StaticLine(line: line, text: effectiveText),
-                                          );
-                                        }
-                                      },
+                                    HapticFeedback.selectionClick();
+                                    widget.onLyricsInteraction();
+                                    widget.service.notifyUserInteraction();
+                                    widget.service.seekTo(
+                                      Duration(milliseconds: (line.startTime * 1000).toInt()),
                                     );
-
-                                    return TweenAnimationBuilder<double>(
-                                      tween: Tween<double>(begin: clampedBlur, end: clampedBlur),
-                                      duration: const Duration(milliseconds: 400),
+                                  },
+                                  child: AnimatedOpacity(
+                                    duration: const Duration(milliseconds: 380),
+                                    curve: Curves.easeOutCubic,
+                                    opacity: targetOpacity,
+                                    child: AnimatedScale(
+                                      scale: (!_startupSettling && isFocused && !line.isBackground)
+                                          ? 1.045
+                                          : (line.isBackground && phase == _LinePhase.active
+                                              ? 1.0
+                                              : (line.isBackground ? 0.96 : 1.0)),
+                                      alignment: line.alignment == LyricsLineAlignment.right
+                                          ? Alignment.centerRight
+                                          : Alignment.centerLeft,
+                                      duration: const Duration(milliseconds: 420),
                                       curve: Curves.easeOutCubic,
-                                      builder: (context, blurValue, child) {
-                                        if (blurValue <= 0.1) return child!;
-                                        return ImageFiltered(
-                                          imageFilter: ui.ImageFilter.blur(
-                                            sigmaX: blurValue,
-                                            sigmaY: blurValue,
+                                      child: Padding(
+                                          padding: EdgeInsets.only(
+                                            top: isFocused && !line.isBackground ? 2.0 : (data.timingType == LyricsTimingType.none ? 8.0 : 0.0),
+                                            bottom: isFocused && !line.isBackground ? 8.0 : (data.timingType == LyricsTimingType.none ? 8.0 : 2.0),
                                           ),
-                                          child: child!,
-                                        );
-                                      },
-                                      child: innerLine,
-                                    );
-                                  }),
+                                        child: Builder(builder: (context) {
+                                          final innerLine = ValueListenableBuilder<bool>(
+                                            valueListenable: SettingsService().romanizationEnabled,
+                                            builder: (context, romanize, _) {
+                                              final effectiveText = (romanize && line.transliteratedText != null)
+                                                  ? line.transliteratedText!
+                                                  : line.text;
+                                              
+                                              // If timing is 'none', we use a smaller, static style
+                                              if (data.timingType == LyricsTimingType.none) {
+                                                return ValueListenableBuilder<double>(
+                                                  valueListenable: SettingsService().lyricsFontSize,
+                                                  builder: (context, fontSize, _) {
+                                                    final staticSize =
+                                                        (line.isBackground ? fontSize * 0.8 : fontSize) * 0.8;
+                                                    return Align(
+                                                      alignment: line.alignment == LyricsLineAlignment.right
+                                                          ? Alignment.centerRight
+                                                          : Alignment.centerLeft,
+                                                      child: material.Text(
+                                                        effectiveText,
+                                                        textAlign: line.alignment == LyricsLineAlignment.right
+                                                            ? TextAlign.right
+                                                            : TextAlign.left,
+                                                        style: _lyricTextStyle(
+                                                          text: effectiveText,
+                                                          fontSize: staticSize,
+                                                          color: Colors.white.withValues(alpha: 0.95),
+                                                          height: 1.45,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                );
+                                              }
+
+                                              // If romanized text is being used, we check if word-level transliterations exist.
+                                              // If the line has word timing, we animate it word-by-word.
+                                              if (line.hasWordTiming && isActive) {
+                                                // This is the line that rebuilds and repaints every frame, so it is
+                                                // the one that needs the boundary — otherwise its layer is merged with
+                                                // the ancestors (blur, background) and drags them into every repaint.
+                                                return RepaintBoundary(
+                                                  child: _ActiveWordLine(
+                                                    line: line,
+                                                    smoothSeconds: _smoothSeconds,
+                                                    romanize: romanize,
+                                                  ),
+                                                );
+                                              } else {
+                                                return RepaintBoundary(
+                                                  child: line.hasWordTiming
+                                                    ? _ActiveWordLine(
+                                                        line: line, 
+                                                        smoothSeconds: _smoothSeconds,
+                                                        romanize: romanize,
+                                                      )
+                                                    : _StaticLine(line: line, text: effectiveText),
+                                                );
+                                              }
+                                            },
+                                          );
+
+                                          return TweenAnimationBuilder<double>(
+                                            tween: Tween<double>(begin: clampedBlur, end: clampedBlur),
+                                            duration: const Duration(milliseconds: 340),
+                                            curve: Curves.easeOutCubic,
+                                            builder: (context, blurValue, child) {
+                                              if (blurValue <= 0.1) return child!;
+                                              return ImageFiltered(
+                                                imageFilter: ui.ImageFilter.blur(
+                                                  sigmaX: blurValue,
+                                                  sigmaY: blurValue,
+                                                ),
+                                                child: child!,
+                                              );
+                                            },
+                                            child: innerLine,
+                                          );
+                                        }),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    ),
-                  );
-                }
+                        );
+                      }
 
-                      // The position notifier ticks every frame while playing,
-                      // but a line's lit state only changes twice: when it
-                      // starts and when it ends. Handing every visible line a
-                      // fresh rebuild each frame just to recompute that boolean
-                      // is wasted work — see [_LitLine].
                       return _LitLine(
                         position: _smoothSeconds,
                         timingType: data.timingType,
@@ -1329,13 +1384,9 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
                 elapsedSeconds: lineSeconds - group.startTime,
                 wordDuration: dur,
                 liftOffset: liftOffset,
-                style: TextStyle(
-                  fontFamily: hasComplexScript(group.text) ? 'Roboto' : 'Heavy',
-                  fontFamilyFallback:
-                      hasComplexScript(group.text) ? null : kGlobalFontFallbacks,
+                style: _lyricTextStyle(
+                  text: group.text,
                   fontSize: effectiveFontSize,
-                  fontWeight: FontWeight(1000),
-                  letterSpacing: -0.6,
                 ),
               );
             }).toList(),
@@ -1357,24 +1408,15 @@ class _ActiveWordLineState extends State<_ActiveWordLine> {
   }
 }
 
-/// Rebuilds a lyric line only when its lit state actually flips.
-///
-/// [LyricsView] drives everything from a position notifier that ticks every
-/// frame while playing, but a line is lit from the moment it starts until the
-/// moment it ends — two transitions for the whole song. Rebuilding every
-/// visible line on every tick recomputed nothing but a boolean comparison, so
-/// this listener does the comparison itself and only asks for a rebuild when
-/// the answer changes.
-///
-/// Lines that animate themselves ([_ActiveWordLine]) still subscribe to the
-/// same notifier inside their own build, so they keep ticking per frame — only
-/// the surrounding wrapper is now quiet.
+enum _LinePhase { past, upcoming, future, active }
+
+/// Rebuilds a lyric line only when its phase ([_LinePhase]) flips.
 class _LitLine extends StatefulWidget {
   final ValueListenable<double> position;
   final LyricsTimingType timingType;
   final double startTime;
   final double endTime;
-  final Widget Function(bool lit) builder;
+  final Widget Function(_LinePhase phase) builder;
 
   const _LitLine({
     required this.position,
@@ -1389,12 +1431,12 @@ class _LitLine extends StatefulWidget {
 }
 
 class _LitLineState extends State<_LitLine> {
-  late bool _lit;
+  late _LinePhase _phase;
 
   @override
   void initState() {
     super.initState();
-    _lit = _compute();
+    _phase = _compute();
     widget.position.addListener(_onPosition);
   }
 
@@ -1404,7 +1446,7 @@ class _LitLineState extends State<_LitLine> {
     if (oldWidget.startTime != widget.startTime ||
         oldWidget.endTime != widget.endTime ||
         oldWidget.timingType != widget.timingType) {
-      _lit = _compute();
+      _phase = _compute();
     }
     if (!identical(oldWidget.position, widget.position)) {
       oldWidget.position.removeListener(_onPosition);
@@ -1418,22 +1460,80 @@ class _LitLineState extends State<_LitLine> {
     super.dispose();
   }
 
-  bool _compute() {
-    // Untimed lyrics stay lit the whole time.
-    if (widget.timingType == LyricsTimingType.none) return true;
+  _LinePhase _compute() {
+    if (widget.timingType == LyricsTimingType.none) return _LinePhase.active;
     final sec = widget.position.value;
-    return sec >= widget.startTime && sec <= widget.endTime;
+    if (sec >= widget.startTime && sec <= widget.endTime) {
+      return _LinePhase.active;
+    }
+    if (sec > widget.endTime) return _LinePhase.past;
+    if (sec >= widget.startTime - 0.35) return _LinePhase.upcoming;
+    return _LinePhase.future;
   }
 
   void _onPosition() {
     if (!mounted) return;
     final next = _compute();
-    if (next == _lit) return;
-    setState(() => _lit = next);
+    if (next == _phase) return;
+    setState(() => _phase = next);
   }
 
   @override
-  Widget build(BuildContext context) => widget.builder(_lit);
+  Widget build(BuildContext context) => widget.builder(_phase);
+}
+
+class _PressableLyricLine extends StatefulWidget {
+  final bool enabled;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _PressableLyricLine({
+    required this.enabled,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  State<_PressableLyricLine> createState() => _PressableLyricLineState();
+}
+
+class _PressableLyricLineState extends State<_PressableLyricLine> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (!widget.enabled || _pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTapDown: (_) => _setPressed(true),
+      onTapUp: (_) => _setPressed(false),
+      onTapCancel: () => _setPressed(false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.985 : 1.0,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          decoration: BoxDecoration(
+            color: _pressed
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
 }
 
 class _StaticLine extends StatelessWidget {
@@ -1456,6 +1556,7 @@ class _StaticLine extends StatelessWidget {
       valueListenable: settings.lyricsFontSize,
       builder: (context, fontSize, _) {
         final effectiveFontSize = line.isBackground ? fontSize * 0.8 : fontSize;
+        final content = text ?? line.text;
 
         return Padding(
           padding: EdgeInsets.only(
@@ -1465,16 +1566,13 @@ class _StaticLine extends StatelessWidget {
           child: Align(
             alignment: alignment,
             child: material.Text(
-              text ?? line.text,
+              content,
               textAlign: line.alignment == LyricsLineAlignment.right
                   ? TextAlign.right
                   : TextAlign.left,
-              style: TextStyle(
-                fontFamily: hasComplexScript(text ?? line.text) ? 'Roboto' : 'Heavy',
-                fontFamilyFallback: hasComplexScript(text ?? line.text) ? null : kGlobalFontFallbacks,
+              style: _lyricTextStyle(
+                text: content,
                 fontSize: effectiveFontSize,
-                fontWeight: FontWeight(1000),
-                letterSpacing: -0.6,
                 color: Colors.white,
               ),
             ),
@@ -1485,7 +1583,25 @@ class _StaticLine extends StatelessWidget {
   }
 }
 
-class _InterludeDots extends StatelessWidget {
+TextStyle _lyricTextStyle({
+  required String text,
+  required double fontSize,
+  Color? color,
+  double? height,
+}) {
+  final complex = hasComplexScript(text);
+  return TextStyle(
+    fontFamily: complex ? 'Roboto' : 'Heavy',
+    fontFamilyFallback: complex ? null : kGlobalFontFallbacks,
+    fontSize: fontSize,
+    fontWeight: const FontWeight(1000),
+    letterSpacing: -0.6,
+    color: color,
+    height: height,
+  );
+}
+
+class _InterludeDots extends StatefulWidget {
   final ValueNotifier<double> smoothSeconds;
   final double gapStart;
   final double gapEnd;
@@ -1499,86 +1615,143 @@ class _InterludeDots extends StatelessWidget {
   });
 
   @override
+  State<_InterludeDots> createState() => _InterludeDotsState();
+}
+
+class _InterludeDotsState extends State<_InterludeDots> {
+  bool _inGap = false;
+  double _sec = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _sec = widget.smoothSeconds.value;
+    _inGap = _isInGap(_sec);
+    widget.smoothSeconds.addListener(_onSeconds);
+  }
+
+  @override
+  void didUpdateWidget(_InterludeDots oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.smoothSeconds, widget.smoothSeconds)) {
+      oldWidget.smoothSeconds.removeListener(_onSeconds);
+      widget.smoothSeconds.addListener(_onSeconds);
+    }
+    _sec = widget.smoothSeconds.value;
+    _inGap = _isInGap(_sec);
+  }
+
+  @override
+  void dispose() {
+    widget.smoothSeconds.removeListener(_onSeconds);
+    super.dispose();
+  }
+
+  bool _isInGap(double s) => s >= widget.gapStart && s < widget.gapEnd;
+
+  void _onSeconds() {
+    if (!mounted) return;
+    final nextSec = widget.smoothSeconds.value;
+    final nextInGap = _isInGap(nextSec);
+    if (nextInGap || nextInGap != _inGap) {
+      setState(() {
+        _sec = nextSec;
+        _inGap = nextInGap;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    const fadeDuration = 0.4;
+    if (!_inGap) return const SizedBox.shrink();
+    const fadeDuration = 0.45;
 
     return ValueListenableBuilder<bool>(
-      valueListenable: service.userInteractingNotifier,
+      valueListenable: widget.service.userInteractingNotifier,
       builder: (context, isInteracting, child) {
         if (isInteracting) return const SizedBox.shrink();
-        
-        return ValueListenableBuilder<double>(
-          valueListenable: smoothSeconds,
-          builder: (context, seconds, _) {
-            final gapDuration = gapEnd - gapStart;
-            if (gapDuration <= 0) return const SizedBox.shrink();
 
-            final fadeInEnd = gapStart + fadeDuration;
-            final fadeOutStart = gapEnd - fadeDuration;
-            final animStart = fadeInEnd;
-            final animEnd = fadeOutStart;
+        final gapDuration = widget.gapEnd - widget.gapStart;
+        if (gapDuration <= 0) return const SizedBox.shrink();
 
-            if (seconds < gapStart || seconds >= gapEnd) {
-              return const SizedBox.shrink();
-            }
+        final fadeInEnd = widget.gapStart + fadeDuration;
+        final fadeOutStart = widget.gapEnd - fadeDuration;
+        final animStart = fadeInEnd;
+        final animEnd = fadeOutStart;
 
-            double opacity;
-            if (seconds < fadeInEnd) {
-              opacity = ((seconds - gapStart) / fadeDuration).clamp(0.0, 1.0);
-            } else if (seconds > fadeOutStart) {
-              opacity = ((gapEnd - seconds) / fadeDuration).clamp(0.0, 1.0);
-            } else {
-              opacity = 1.0;
-            }
+        double opacity;
+        if (_sec < fadeInEnd) {
+          opacity = ((_sec - widget.gapStart) / fadeDuration).clamp(0.0, 1.0);
+        } else if (_sec > fadeOutStart) {
+          opacity = ((widget.gapEnd - _sec) / fadeDuration).clamp(0.0, 1.0);
+        } else {
+          opacity = 1.0;
+        }
 
-            const maxHeight = 56.0;
-            double height;
-            if (seconds < fadeInEnd) {
-              height = maxHeight * Curves.easeOutCubic.transform(opacity);
-            } else if (seconds > fadeOutStart) {
-              height = maxHeight * Curves.easeInCubic.transform(opacity);
-            } else {
-              height = maxHeight;
-            }
+        const maxHeight = 56.0;
+        final easedOpacity = Curves.easeInOutCubic.transform(opacity);
+        final height = maxHeight * easedOpacity;
 
-            final animDuration = animEnd - animStart;
-            final animProgress = animDuration > 0
-                ? ((seconds - animStart) / animDuration).clamp(0.0, 1.0)
-                : 0.0;
+        final animDuration = animEnd - animStart;
+        final animProgress = animDuration > 0
+            ? ((_sec - animStart) / animDuration).clamp(0.0, 1.0)
+            : 0.0;
 
-            return SizedBox(
-              height: height,
-              child: Opacity(
-                opacity: Curves.easeOutCubic.transform(opacity),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 4.0),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: List.generate(3, (i) {
-                        final dotThreshold = i / 3.0;
-                        final dotBrightness = ((animProgress - dotThreshold) / 0.33).clamp(0.0, 1.0);
-                        final lit = Curves.easeOutCubic.transform(dotBrightness);
+        return SizedBox(
+          height: height,
+          child: Opacity(
+            opacity: easedOpacity,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 4.0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(3, (i) {
+                    final dotThreshold = i / 3.0;
+                    final dotBrightness =
+                        ((animProgress - dotThreshold) / 0.33).clamp(0.0, 1.0);
+                    final lit = Curves.easeOutCubic.transform(dotBrightness);
 
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    // Breathing pulse as each dot lights + subtle floating wave.
+                    final pulse = math.sin(lit * math.pi) * 0.16;
+                    final dotScale = 0.88 + 0.14 * lit + pulse;
+                    final bobY =
+                        math.sin((_sec * 2.6) - (i * 0.9)) * 1.8 * opacity;
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 5.0),
+                      child: Transform.translate(
+                        offset: Offset(0, bobY),
+                        child: Transform.scale(
+                          scale: dotScale,
                           child: Container(
-                            width: 12,
-                            height: 12,
+                            width: 11,
+                            height: 11,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: Colors.white.withValues(alpha: 0.15 + 0.85 * lit),
+                              color:
+                                  Colors.white.withValues(alpha: 0.18 + 0.82 * lit),
+                              boxShadow: lit > 0.2
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.35 * lit * easedOpacity,
+                                        ),
+                                        blurRadius: 10,
+                                      ),
+                                    ]
+                                  : null,
                             ),
                           ),
-                        );
-                      }),
-                    ),
-                  ),
+                        ),
+                      ),
+                    );
+                  }),
                 ),
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );
@@ -1623,12 +1796,12 @@ class CinematicScrollPhysics extends BouncingScrollPhysics {
 /// Tracks recent auto-scroll offsets so lines below the active focus can trail
 /// slightly behind in a domino/wave ripple without touching layout or blur.
 class _LyricsWaveController extends ChangeNotifier {
-  static const double staggerPerLine = 0.042;
+  static const double staggerPerLine = 0.036;
   static const int maxWaveLines = 7;
   static const double _maxDelaySec = staggerPerLine * maxWaveLines;
   static const double _maxHistorySec = _maxDelaySec + 0.25;
-  static const double _maxPosAmp = 38.0;
-  static const double _maxNegAmp = 18.0;
+  static const double _maxPosAmp = 34.0;
+  static const double _maxNegAmp = 16.0;
 
   final ScrollController _scrollController;
   late final Ticker _ticker;

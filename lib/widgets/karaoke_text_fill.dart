@@ -229,7 +229,13 @@ class KaraokeTextFill extends StatelessWidget {
   }
 }
 
-/// Per-letter scale animation for long-hold words.
+/// Per-letter lift & scale animation for long-hold words.
+///
+/// Measures the monolithic [TextPainter] layout once (and caches it) so each
+/// grapheme sits at its exact kerning/advance offset inside a [SizedBox] whose
+/// dimensions match plain `Text(text, style: style)`. That guarantees zero
+/// width or line-wrap shift when transitioning between idle `Text` and
+/// active per-letter animation.
 class _LetterSettleText extends StatelessWidget {
   final String text;
   final TextStyle style;
@@ -243,25 +249,108 @@ class _LetterSettleText extends StatelessWidget {
     required this.wordDuration,
   });
 
+  static final Map<_LetterLayoutKey, _MeasuredWordLayout> _layoutCache = {};
+
+  static _MeasuredWordLayout _measureLayout({
+    required String text,
+    required TextStyle baseStyle,
+    required TextScaler textScaler,
+    required TextDirection textDirection,
+  }) {
+    final key = _LetterLayoutKey(
+      text: text,
+      fontFamily: baseStyle.fontFamily,
+      fontSize: baseStyle.fontSize,
+      fontWeight: baseStyle.fontWeight,
+      letterSpacing: baseStyle.letterSpacing,
+      textScaler: textScaler,
+      textDirection: textDirection,
+    );
+    final cached = _layoutCache[key];
+    if (cached != null) return cached;
+
+    if (_layoutCache.length >= 256) {
+      _layoutCache.clear();
+    }
+
+    // Measure with visuals stripped so glow/color updates share the cache key.
+    final metricsStyle = baseStyle.copyWith(
+      color: const Color(0xFFFFFFFF),
+      shadows: null,
+      foreground: null,
+      background: null,
+    );
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: metricsStyle),
+      textDirection: textDirection,
+      textScaler: textScaler,
+    )..layout();
+
+    final glyphs = <_MeasuredGlyph>[];
+    var utf16Offset = 0;
+    for (final cluster in text.characters) {
+      final start = utf16Offset;
+      final end = start + cluster.length;
+      utf16Offset = end;
+
+      if (cluster.trim().isEmpty) continue;
+
+      final boxes = painter.getBoxesForSelection(
+        TextSelection(baseOffset: start, extentOffset: end),
+      );
+      final double dx = boxes.isNotEmpty
+          ? boxes.first.left
+          : painter
+              .getOffsetForCaret(TextPosition(offset: start), Rect.zero)
+              .dx;
+      glyphs.add(_MeasuredGlyph(text: cluster, dx: dx));
+    }
+
+    final measured = _MeasuredWordLayout(
+      size: painter.size,
+      glyphs: glyphs,
+    );
+    painter.dispose();
+    _layoutCache[key] = measured;
+    return measured;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final chars = text.split('');
+    final resolvedStyle = DefaultTextStyle.of(context).style.merge(style);
+    final textScaler = MediaQuery.textScalerOf(context);
+    final textDirection = Directionality.of(context);
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      textBaseline: TextBaseline.alphabetic,
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      children: [
-        for (var i = 0; i < chars.length; i++)
-          Transform.translate(
-            offset: Offset(0, _liftForLetter(i, chars.length)),
-            child: Transform.scale(
-              scale: _scaleForLetter(i, chars.length),
-              alignment: Alignment.bottomCenter,
-              child: Text(chars[i], style: style),
+    final layout = _measureLayout(
+      text: text,
+      baseStyle: resolvedStyle,
+      textScaler: textScaler,
+      textDirection: textDirection,
+    );
+    final glyphStyle = resolvedStyle.copyWith(letterSpacing: 0);
+    final count = layout.glyphs.length;
+
+    return SizedBox(
+      width: layout.size.width,
+      height: layout.size.height,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (var i = 0; i < count; i++)
+            Positioned(
+              left: layout.glyphs[i].dx,
+              top: 0,
+              child: Transform.translate(
+                offset: Offset(0, _liftForLetter(i, count)),
+                child: Transform.scale(
+                  scale: _scaleForLetter(i, count),
+                  alignment: Alignment.bottomCenter,
+                  child: Text(layout.glyphs[i].text, style: glyphStyle),
+                ),
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -301,4 +390,61 @@ class _LetterSettleText extends StatelessWidget {
     final ease = Curves.easeInOutSine.transform(1.0 - settleProgress);
     return 1.0 + (maxScale * ease);
   }
+}
+
+class _MeasuredGlyph {
+  final String text;
+  final double dx;
+
+  const _MeasuredGlyph({required this.text, required this.dx});
+}
+
+class _MeasuredWordLayout {
+  final Size size;
+  final List<_MeasuredGlyph> glyphs;
+
+  const _MeasuredWordLayout({required this.size, required this.glyphs});
+}
+
+class _LetterLayoutKey {
+  final String text;
+  final String? fontFamily;
+  final double? fontSize;
+  final FontWeight? fontWeight;
+  final double? letterSpacing;
+  final TextScaler textScaler;
+  final TextDirection textDirection;
+
+  const _LetterLayoutKey({
+    required this.text,
+    required this.fontFamily,
+    required this.fontSize,
+    required this.fontWeight,
+    required this.letterSpacing,
+    required this.textScaler,
+    required this.textDirection,
+  });
+
+  @override
+  bool operator ==(Object other) {
+    return other is _LetterLayoutKey &&
+        other.text == text &&
+        other.fontFamily == fontFamily &&
+        other.fontSize == fontSize &&
+        other.fontWeight == fontWeight &&
+        other.letterSpacing == letterSpacing &&
+        other.textScaler == textScaler &&
+        other.textDirection == textDirection;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        text,
+        fontFamily,
+        fontSize,
+        fontWeight,
+        letterSpacing,
+        textScaler,
+        textDirection,
+      );
 }
